@@ -40,35 +40,35 @@ Your agent sends editing commands through the MCP protocol. The server translate
 
 **Note:** A browser window will open automatically on the first tool call. This is expected -- Photopea runs entirely in the browser and the server needs it to perform image editing operations.
 
-> Don't want a visible window? See [Headless Mode](#headless-mode-türkçe) below to run Photopea fully unattended in a headless Chromium.
+> Don't want a visible window? See [Headless Mode](#headless-mode) below to run Photopea fully unattended in a headless Chromium.
 
-## Headless Mode (Türkçe)
+## Headless Mode
 
-Varsayılan olarak ilk tool çağrısında görünür bir tarayıcı penceresi açılır. **Headless mod**, Photopea'yı görünür pencere olmadan, arka planda bir headless Chromium içinde çalıştırır — AI ajanının tamamen otomatik (unattended) kullanması için idealdir ve kullanıcının ana tarayıcısıyla çakışmayı önler.
+By default a visible browser window opens on the first tool call. **Headless mode** runs Photopea inside a background headless Chromium instead — ideal for fully unattended use by an AI agent, and it avoids conflicting with your main browser.
 
-### Kurulum
+### Setup
 
-Headless mod **Playwright** kullanır (opsiyonel bağımlılık). Bir kez chromium indir:
+Headless mode uses **Playwright** (an optional dependency). Install Chromium once:
 
 ```bash
-npm install            # playwright opsiyonel bağımlılık olarak gelir
+npm install            # playwright comes in as an optional dependency
 npm run headless:setup # = playwright install chromium
 ```
 
-### Çalıştırma
+### Running
 
-Üç yoldan biriyle etkinleştirilir:
+Enable it in any of three ways:
 
 ```bash
 # 1) CLI flag
 node dist/index.js --headless
 npm run start:headless
 
-# 2) Ortam değişkeni
+# 2) Environment variable
 PHOTOPEA_MCP_HEADLESS=1 node dist/index.js
 ```
 
-MCP istemci config'inde (ör. Claude Code) `args` veya `env` üzerinden:
+In an MCP client config (e.g. Claude Code), via `args` or `env`:
 
 ```json
 {
@@ -77,18 +77,19 @@ MCP istemci config'inde (ör. Claude Code) `args` veya `env` üzerinden:
 }
 ```
 
-### Ayarlar (ortam değişkenleri)
+### Configuration (environment variables)
 
-| Değişken | Açıklama |
-|----------|----------|
-| `PHOTOPEA_MCP_HEADLESS` | `1` / `true` → headless modu açar |
-| `PHOTOPEA_MCP_BROWSER_CHANNEL` | Opsiyonel Playwright kanalı (`chrome`, `msedge`). Boşsa Playwright'ın paketli Chromium'u kullanılır |
+| Variable | Description |
+|----------|-------------|
+| `PHOTOPEA_MCP_HEADLESS` | `1` / `true` enables headless mode |
+| `PHOTOPEA_MCP_BROWSER_CHANNEL` | Optional Playwright channel (`chrome`, `msedge`). When unset, Playwright's bundled Chromium is used |
 
-### Notlar
+### Notes
 
-- Playwright kurulu değilse headless mod başlatılırken açıklayıcı bir hata verir; **sistem-tarayıcı modu Playwright olmadan da çalışır.**
-- Headless tarayıcı sunucu kapanınca otomatik kapatılır (sistem-tarayıcı modunda dış pencere yönetilmez).
-- Doğrulama: `node scripts/smoke-headless.mjs` — headless'te belge oluştur → çiz → PNG export round-trip'ini test eder.
+- If Playwright is not installed, headless startup fails with a clear error; **system-browser mode works without Playwright.**
+- The headless browser is closed automatically when the server stops (an external system browser is not managed).
+- Text layers are not rendered in headless Chromium — see [Headless-specific](#headless-specific) limitations for the overlay workaround.
+- Verify with `node scripts/smoke-headless.mjs` — a headless create → draw → PNG-export round-trip check.
 
 ## Quick Start
 
@@ -267,8 +268,12 @@ npm run build
 |---------|-------------|
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm run dev` | Watch mode with auto-reload |
+| `npm run dev:headless` | Watch mode in headless Chromium |
 | `npm test` | Run unit and integration tests |
-| `npm start` | Start the server |
+| `npm run test:e2e` | Run end-to-end tests |
+| `npm start` | Start the server (system browser) |
+| `npm run start:headless` | Start the server in headless mode |
+| `npm run headless:setup` | Download Playwright Chromium (one-time) |
 
 ### Architecture
 
@@ -280,16 +285,24 @@ The server has four main components:
 
 **Script Builder** (`src/bridge/script-builder.ts`) -- Pure functions that translate tool parameters into Photopea JavaScript API calls. Each builder function generates a script string that Photopea can execute.
 
-**Browser Frontend** (`src/frontend/index.html`) -- A single-page app that loads Photopea in an iframe, connects to the WebSocket bridge, and relays scripts to Photopea via `postMessage`. Returns results back through the WebSocket.
+**Browser Frontend** (`src/frontend/index.html`) -- A single-page app that loads Photopea in an iframe, connects to the WebSocket bridge, and relays scripts to Photopea via `postMessage`. Returns results back through the WebSocket. Script completion is detected via a unique `echoToOE` sentinel (not Photopea's spurious document-open `"done"`), so combined create+export scripts return reliably.
+
+**Browser Launcher** (`src/browser/`, `src/config.ts`) -- Pluggable launch strategy injected into the bridge. `system-launcher.ts` opens the user's default browser (default); `headless-launcher.ts` drives a headless Chromium via Playwright. `config.ts` resolves the strategy from `--headless` / `PHOTOPEA_MCP_HEADLESS` / `PHOTOPEA_MCP_BROWSER_CHANNEL`.
 
 ```
 src/
   index.ts              # Entry point: HTTP server, browser launch, MCP startup
   server.ts             # MCP server initialization and tool registration
+  config.ts             # Launch config (headless flag / env resolution)
   bridge/
-    websocket-server.ts # WebSocket bridge with request queue
+    websocket-server.ts # WebSocket bridge with request queue + injectable launcher
     script-builder.ts   # Photopea JS code generators
     types.ts            # Protocol message types
+  browser/
+    types.ts            # BrowserHandle / BrowserLauncher contracts
+    launcher.ts         # Resolves system vs headless launcher
+    system-launcher.ts  # Opens the default system browser
+    headless-launcher.ts# Headless Chromium via Playwright (optional dep)
   tools/
     document.ts         # Document operations (5 tools)
     layer.ts            # Layer operations (11 tools)
@@ -301,6 +314,13 @@ src/
     platform.ts         # Port discovery, browser launch
   frontend/
     index.html          # Browser UI with Photopea iframe
+scripts/                # Dev/demo harnesses (not shipped to npm)
+  smoke-headless.mjs    # Headless create/draw/export round-trip check
+  designer-scenarios.mjs# 10 designer use-cases on real images
+  harder-scenarios.mjs  # 10 advanced composites (collage, duotone, vignette…)
+  make_text_overlay.py  # Pillow text overlay (headless text workaround)
+  make_overlay.py       # Pillow multi-primitive overlay (ring/gradient/tiled…)
+  make_circle.py        # Pillow circular crop + ring
 ```
 
 ## Security
@@ -313,13 +333,20 @@ src/
 
 - Heavy scripts (e.g., gradients with many color steps) may cause the Photopea browser UI to become unresponsive. The operations still complete successfully in the background and exports will work as expected.
 - Refreshing the browser page will discard all unsaved work. Export your documents before refreshing.
-- Only one browser tab should be open at a time. Multiple tabs will conflict over the WebSocket connection.
+- Only one browser tab should be open at a time. Multiple tabs will conflict over the WebSocket connection. (Headless mode sidesteps this — it runs its own dedicated Chromium.)
 - The `reorder_layer` tool may cause the Photopea UI to become unresponsive. To avoid this, create layers in the desired order rather than reordering after creation.
+
+### Headless-specific
+
+- **Text layers do not render in headless Chromium.** A text layer is created but never lays out (its bounds stay `[0,0,0,0]`) and is absent from the export, even though the font list loads. Add text by rasterizing it to a transparent PNG and compositing it (see `scripts/make_text_overlay.py` + the overlay-composite pattern in `scripts/designer-scenarios.mjs`), or run text-heavy work in the visible system-browser mode.
+- Creating a blank document from scratch requires a resolution argument; the `create_document` tool always passes one, so this only affects raw `run_script` calls (`app.documents.add(w, h, 72)`).
 
 ## Requirements
 
 - Node.js >= 18
-- A modern web browser (Chrome, Firefox, Edge, Safari)
+- A modern web browser (Chrome, Firefox, Edge, Safari) for system-browser mode
+- **Headless mode:** [Playwright](https://playwright.dev) + Chromium (`npm run headless:setup`)
+- **Overlay helper scripts** (`scripts/*.py`): Python 3 + [Pillow](https://python-pillow.org) (`pip install pillow`)
 
 ## License
 
