@@ -248,7 +248,7 @@
       <div id="status-dot"></div>
       <span id="status-text">Connecting...</span>
       <span id="doc-info"></span>
-      <a id="github-star" href="https://github.com/attalla1/photopea-mcp-server" target="_blank" rel="noopener">
+      <a id="github-star" href="https://github.com/bilal-arikan/photopea-mcp-server" target="_blank" rel="noopener">
         <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25z"/></svg>
         Star on GitHub
       </a>
@@ -305,8 +305,20 @@
 
       // Per-execution buffering
       var pendingId       = null;
-      var echoBuffer      = [];     // string messages from Photopea before "done"
+      var pendingMode     = null;   // 'script' | 'load' — how the current op completes
+      var echoBuffer      = [];     // string messages from Photopea before completion
       var fileBuffer      = null;   // ArrayBuffer from Photopea (last one wins)
+
+      // Completion sentinel appended to every executed script. Photopea emits a
+      // spurious "done" when a document is opened/created, so "done" cannot be
+      // used to detect script completion. Instead we echo a unique sentinel as
+      // the last statement; the script is complete when that sentinel arrives.
+      var SENTINEL_OK     = '@@PP_EXEC_OK@@:';
+
+      // Errors Photopea reports are surfaced as strings beginning with one of
+      // these names. Used to classify a result as failed (best-effort, matching
+      // Photopea's own error reporting — some errors are swallowed silently).
+      var ERROR_RE        = /^(ReferenceError|TypeError|SyntaxError|Error|RangeError):/m;
 
       // -----------------------------------------------------------------------
       // Collapsible log
@@ -467,10 +479,19 @@
       // -----------------------------------------------------------------------
       function handleExecute(msg) {
         pendingId   = msg.id;
+        pendingMode = 'script';
         echoBuffer  = [];
         fileBuffer  = null;
 
-        sendToPhotopea(msg.script);
+        sendToPhotopea(wrapScript(msg.script, msg.id));
+      }
+
+      // Append a unique completion sentinel as the final statement. Photopea
+      // runs the script and (whether it succeeds or swallows an error) reaches
+      // this echo last, giving a deterministic end-of-script signal that is
+      // immune to the spurious document-open "done".
+      function wrapScript(script, id) {
+        return script + '\n;app.echoToOE(' + JSON.stringify(SENTINEL_OK + id) + ');';
       }
 
       function sendToPhotopea(payload) {
@@ -507,11 +528,13 @@
           iframe.contentWindow.postMessage(bytes.buffer, '*');
         }
 
-        // The load operation completes when Photopea sends "done"
-        // We treat it as a pending request so we wait for "done" then ACK
-        pendingId  = id;
-        echoBuffer = [];
-        fileBuffer = null;
+        // The load operation completes when Photopea sends "done" (there is no
+        // script to append a sentinel to). A freshly opened document emits a
+        // single "done", which is exactly the completion signal we want here.
+        pendingId   = id;
+        pendingMode = 'load';
+        echoBuffer  = [];
+        fileBuffer  = null;
       }
 
       // -----------------------------------------------------------------------
@@ -523,67 +546,71 @@
         if (!iframe || (iframe.contentWindow && event.source !== iframe.contentWindow)) return;
         var data = event.data;
 
-        // Any message from Photopea means it's loaded — mark ready on first contact
+        // First message of any kind = Photopea finished loading.
         if (!photopeaReady) {
-          handlePhotopea_done();
-        }
-
-        // ArrayBuffer = exported file data
-        if (data instanceof ArrayBuffer) {
-          fileBuffer = data;
-          return;
-        }
-
-        // String messages
-        if (typeof data === 'string') {
-          if (data === 'done') {
-            handlePhotopea_done();
-          } else {
-            // echoToOE output or other string result
-            echoBuffer.push(data);
-          }
-          return;
-        }
-      });
-
-      function handlePhotopea_done() {
-        if (!photopeaReady) {
-          // First "done" = Photopea has finished loading
           photopeaReady = true;
           setPhotopeaReady();
           if (wsReady) {
             sendToWS({ type: 'status', status: 'ready' });
           }
+        }
+
+        // ArrayBuffer = exported file data (buffered until the OK sentinel).
+        if (data instanceof ArrayBuffer) {
+          fileBuffer = data;
           return;
         }
 
-        // Subsequent "done" = script finished executing
-        if (pendingId === null) {
+        if (typeof data !== 'string') return;
+
+        // Script completion sentinel (see wrapScript). This is the reliable
+        // end-of-script signal, immune to the spurious document-open "done".
+        if (pendingMode === 'script' && pendingId !== null &&
+            data === SENTINEL_OK + pendingId) {
+          finalizeScript();
           return;
         }
 
+        // Plain "done": initial readiness is handled above.
+        if (data === 'done') {
+          if (pendingMode === 'load' && pendingId !== null) {
+            // A file-load completes on the document-open "done".
+            finalizeLoad();
+          } else if (pendingMode === 'script' && pendingId !== null &&
+                     ERROR_RE.test(echoBuffer.join('\n'))) {
+            // Safety net: an aborting error may report a string and "done"
+            // before the OK sentinel could run. Finalize as an error result.
+            finalizeScript();
+          }
+          // Otherwise this is the spurious document-open "done" — ignore it.
+          return;
+        }
+
+        // Any other string = echoToOE output from the user script.
+        echoBuffer.push(data);
+      });
+
+      // Finalize a script execution. By the time the OK sentinel (or the error
+      // safety net) fires, any exported file buffer has already arrived
+      // (messages are delivered in script-call order).
+      function finalizeScript() {
         var id = pendingId;
-        pendingId = null;
+        pendingId   = null;
+        pendingMode = null;
 
         if (fileBuffer !== null) {
-          // File export result
-          var arr  = new Uint8Array(fileBuffer);
-          var b64  = uint8ArrayToBase64(arr);
-          var mime = detectMime(arr);
+          var arr = new Uint8Array(fileBuffer);
           sendToWS({
             type:     'file',
             id:       id,
             success:  true,
-            data:     b64,
-            mimeType: mime,
+            data:     uint8ArrayToBase64(arr),
+            mimeType: detectMime(arr),
             error:    null
           });
         } else {
-          // Script result (echoToOE strings joined)
           var resultData = echoBuffer.length > 0 ? echoBuffer.join('\n') : null;
-          // Detect script errors: if the result contains an error pattern and
-          // no explicit echoToOE('ok') was received, treat it as a failure.
-          var hasError = resultData !== null && /^(ReferenceError|TypeError|SyntaxError|Error|RangeError):/.test(resultData);
+          var hasError   = resultData !== null && ERROR_RE.test(resultData);
           sendToWS({
             type:    'result',
             id:      id,
@@ -593,6 +620,16 @@
           });
         }
 
+        echoBuffer = [];
+        fileBuffer = null;
+      }
+
+      // Finalize a file-load operation (completes on the document-open "done").
+      function finalizeLoad() {
+        var id = pendingId;
+        pendingId   = null;
+        pendingMode = null;
+        sendToWS({ type: 'result', id: id, success: true, data: null, error: null });
         echoBuffer = [];
         fileBuffer = null;
       }

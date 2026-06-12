@@ -9,14 +9,12 @@
 </p>
 
 <p align="center">
-  <a href="https://glama.ai/mcp/servers/attalla1/photopea-mcp-server"><img src="https://glama.ai/mcp/servers/attalla1/photopea-mcp-server/badges/score.svg" alt="Glama score"></a>
-  <a href="https://www.npmjs.com/package/photopea-mcp-server"><img src="https://img.shields.io/npm/v/photopea-mcp-server.svg" alt="npm version"></a>
-  <a href="https://github.com/attalla1/photopea-mcp-server/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license"></a>
+  <a href="https://github.com/bilal-arikan/photopea-mcp-server/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license"></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/photopea-mcp-server.svg" alt="node"></a>
 </p>
 
 <p align="center">
-  <a href="https://glama.ai/mcp/servers/attalla1/photopea-mcp-server"><img src="https://glama.ai/mcp/servers/attalla1/photopea-mcp-server/badges/card.svg" alt="photopea-mcp-server MCP server"></a>
+  <em>A collaborative fork — original implementation by <a href="https://github.com/attalla1/photopea-mcp-server">attalla1</a>, extended together with <a href="https://github.com/bilal-arikan">bilal-arikan</a> (headless mode &amp; text-overlay support).</em>
 </p>
 
 ## Demo
@@ -41,6 +39,56 @@ graph LR
 Your agent sends editing commands through the MCP protocol. The server translates these into Photopea JavaScript API calls and executes them via a WebSocket bridge to the browser.
 
 **Note:** A browser window will open automatically on the first tool call. This is expected -- Photopea runs entirely in the browser and the server needs it to perform image editing operations.
+
+> Don't want a visible window? See [Headless Mode](#headless-mode-türkçe) below to run Photopea fully unattended in a headless Chromium.
+
+## Headless Mode (Türkçe)
+
+Varsayılan olarak ilk tool çağrısında görünür bir tarayıcı penceresi açılır. **Headless mod**, Photopea'yı görünür pencere olmadan, arka planda bir headless Chromium içinde çalıştırır — AI ajanının tamamen otomatik (unattended) kullanması için idealdir ve kullanıcının ana tarayıcısıyla çakışmayı önler.
+
+### Kurulum
+
+Headless mod **Playwright** kullanır (opsiyonel bağımlılık). Bir kez chromium indir:
+
+```bash
+npm install            # playwright opsiyonel bağımlılık olarak gelir
+npm run headless:setup # = playwright install chromium
+```
+
+### Çalıştırma
+
+Üç yoldan biriyle etkinleştirilir:
+
+```bash
+# 1) CLI flag
+node dist/index.js --headless
+npm run start:headless
+
+# 2) Ortam değişkeni
+PHOTOPEA_MCP_HEADLESS=1 node dist/index.js
+```
+
+MCP istemci config'inde (ör. Claude Code) `args` veya `env` üzerinden:
+
+```json
+{
+  "command": "npx",
+  "args": ["-y", "photopea-mcp-server", "--headless"]
+}
+```
+
+### Ayarlar (ortam değişkenleri)
+
+| Değişken | Açıklama |
+|----------|----------|
+| `PHOTOPEA_MCP_HEADLESS` | `1` / `true` → headless modu açar |
+| `PHOTOPEA_MCP_BROWSER_CHANNEL` | Opsiyonel Playwright kanalı (`chrome`, `msedge`). Boşsa Playwright'ın paketli Chromium'u kullanılır |
+
+### Notlar
+
+- Playwright kurulu değilse headless mod başlatılırken açıklayıcı bir hata verir; **sistem-tarayıcı modu Playwright olmadan da çalışır.**
+- Headless tarayıcı sunucu kapanınca otomatik kapatılır (sistem-tarayıcı modunda dış pencere yönetilmez).
+- Doğrulama: `node scripts/smoke-headless.mjs` — headless'te belge oluştur → çiz → PNG export round-trip'ini test eder.
 
 ## Quick Start
 
@@ -207,7 +255,7 @@ Once installed, ask your agent to perform image editing tasks:
 ## Development
 
 ```bash
-git clone https://github.com/attalla1/photopea-mcp-server.git
+git clone https://github.com/bilal-arikan/photopea-mcp-server.git
 cd photopea-mcp-server
 npm install
 npm run build

@@ -43,6 +43,9 @@ export function registerTextTools(server: McpServer, bridge: PhotopeaBridge): vo
     bridge.sendActivity({ type: "activity", id: "", tool: "add_text", summary: `Add text: "${params.content.slice(0, 40)}"` });
     const result = await bridge.executeScript(script);
     if (!result.success) return { isError: true, content: [{ type: "text" as const, text: result.error || "Failed to add text" }] };
+    // Text lays out asynchronously (first-use font load); wait so a following
+    // export/flatten captures the rendered glyphs instead of empty bounds.
+    await bridge.settleActiveLayer();
     return { content: [{ type: "text" as const, text: `Text layer added at (${params.x}, ${params.y})` }] };
   });
 
@@ -66,6 +69,8 @@ export function registerTextTools(server: McpServer, bridge: PhotopeaBridge): vo
     bridge.sendActivity({ type: "activity", id: "", tool: "edit_text", summary: `Edit text layer: ${params.target}` });
     const result = await bridge.executeScript(script);
     if (!result.success) return { isError: true, content: [{ type: "text" as const, text: result.error || "Failed to edit text" }] };
+    // Re-layout after a content/font/size change is also async; wait for it.
+    await bridge.settleActiveLayer();
     return { content: [{ type: "text" as const, text: `Text layer edited: ${params.target}` }] };
   });
 

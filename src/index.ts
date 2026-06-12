@@ -7,6 +7,8 @@ import { dirname, join, resolve } from "path";
 import { PhotopeaBridge } from "./bridge/websocket-server.js";
 import { createServer } from "./server.js";
 import { findAvailablePort } from "./utils/platform.js";
+import { resolveLaunchConfig } from "./config.js";
+import { createBrowserLauncher } from "./browser/launcher.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -15,7 +17,8 @@ const DEFAULT_PORT = 4117;
 
 async function main(): Promise<void> {
   const port = await findAvailablePort(DEFAULT_PORT);
-  const bridge = new PhotopeaBridge(port);
+  const launchConfig = resolveLaunchConfig();
+  const bridge = new PhotopeaBridge(port, createBrowserLauncher(launchConfig));
 
   // Serve the frontend HTML on HTTP GET /
   const httpServer = bridge.getHttpServer();
@@ -39,6 +42,9 @@ async function main(): Promise<void> {
 
   await bridge.start();
   console.error(`Photopea MCP bridge running on http://127.0.0.1:${port}`);
+  console.error(
+    `Browser mode: ${launchConfig.headless ? "headless (Playwright)" : "system browser"}`
+  );
 
   // Start MCP server over stdio (browser launches lazily on first tool call)
   const mcpServer = createServer(bridge);

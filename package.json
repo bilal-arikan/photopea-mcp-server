@@ -1,17 +1,21 @@
 {
   "name": "photopea-mcp-server",
-  "version": "0.1.1",
-  "description": "MCP server for AI-driven image editing with Photopea",
-  "author": "attalla1",
+  "version": "0.2.0",
+  "description": "MCP server for AI-driven image editing with Photopea (headless mode + text overlay support)",
+  "author": "bilal-arikan",
+  "contributors": [
+    "attalla1 (original author & base implementation)",
+    "bilal-arikan (headless mode, text-overlay, reliability fixes)"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/attalla1/photopea-mcp-server.git"
+    "url": "git+https://github.com/bilal-arikan/photopea-mcp-server.git"
   },
   "bugs": {
-    "url": "https://github.com/attalla1/photopea-mcp-server/issues"
+    "url": "https://github.com/bilal-arikan/photopea-mcp-server/issues"
   },
-  "homepage": "https://github.com/attalla1/photopea-mcp-server#readme",
+  "homepage": "https://github.com/bilal-arikan/photopea-mcp-server#readme",
   "keywords": [
     "modelcontextprotocol",
     "mcp",
@@ -32,7 +36,10 @@
   },
   "scripts": {
     "start": "node dist/index.js",
+    "start:headless": "node dist/index.js --headless",
     "dev": "tsx watch src/index.ts",
+    "dev:headless": "tsx watch src/index.ts --headless",
+    "headless:setup": "playwright install chromium",
     "build": "tsc && chmod 755 dist/index.js",
     "prepublishOnly": "npm run build",
     "clean": "rm -rf dist",
@@ -48,6 +55,9 @@
     "open": "^10.1.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.49.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

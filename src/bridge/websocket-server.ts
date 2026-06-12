@@ -11,11 +11,16 @@ import type {
   LoadMessage,
   PendingRequest,
 } from "./types.js";
-import { launchBrowser } from "../utils/platform.js";
+import { buildLayoutProbe } from "./script-builder.js";
+import { launchSystemBrowser } from "../browser/system-launcher.js";
+import type { BrowserHandle, BrowserLauncher } from "../browser/types.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const EXPORT_TIMEOUT_MS = 60_000;
 const READY_TIMEOUT_MS = 60_000;
+// Async text layout (first-use web-font load) settle window.
+const LAYOUT_SETTLE_TIMEOUT_MS = 5_000;
+const LAYOUT_POLL_INTERVAL_MS = 120;
 
 export class PhotopeaBridge {
   public readonly httpServer: HttpServer;
@@ -28,9 +33,12 @@ export class PhotopeaBridge {
   private pendingLoads: Map<string, string> = new Map(); // id -> serialized LoadMessage JSON
   private port: number;
   private browserLaunched: boolean = false;
+  private browserHandle: BrowserHandle | null = null;
+  private launcher: BrowserLauncher;
 
-  constructor(port: number) {
+  constructor(port: number, launcher: BrowserLauncher = launchSystemBrowser) {
     this.port = port;
+    this.launcher = launcher;
 
     // Create bare HTTP server; route handling is added externally via the entry point
     this.httpServer = createServer();
@@ -98,9 +106,14 @@ export class PhotopeaBridge {
       this.browserLaunched = true;
       const url = `http://127.0.0.1:${this.port}`;
       console.error(`Launching browser: ${url}`);
-      launchBrowser(url).catch(() => {
-        console.error(`Could not auto-launch browser. Please open ${url}`);
-      });
+      this.launcher(url)
+        .then((handle) => {
+          this.browserHandle = handle;
+        })
+        .catch((err: unknown) => {
+          const reason = err instanceof Error ? err.message : String(err);
+          console.error(`Could not auto-launch browser (${reason}). Please open ${url}`);
+        });
     }
 
     return new Promise<void>((resolve, reject) => {
@@ -144,8 +157,15 @@ export class PhotopeaBridge {
       this.client = null;
       this.ready = false;
 
-      this.wss.close(() => {
-        this.httpServer.close(() => resolve());
+      // Close the owned browser (no-op for an external system browser)
+      const handle = this.browserHandle;
+      this.browserHandle = null;
+      const closeBrowser = handle ? handle.close() : Promise.resolve();
+
+      void closeBrowser.finally(() => {
+        this.wss.close(() => {
+          this.httpServer.close(() => resolve());
+        });
       });
     });
   }
@@ -204,6 +224,35 @@ export class PhotopeaBridge {
       this.queue.push(pending);
       this.processNext();
     });
+  }
+
+  /**
+   * Wait until the active layer has a non-zero rendered size, or until the
+   * settle timeout elapses. Text layers lay out asynchronously in Photopea
+   * (the first use of a font triggers an async web-font load), so a freshly
+   * created text layer reports bounds of [0,0,0,0] until layout completes.
+   * Flattening/exporting before then drops the text. Best-effort: on timeout
+   * or any probe error it simply returns so the caller can proceed.
+   */
+  async settleActiveLayer(
+    timeoutMs: number = LAYOUT_SETTLE_TIMEOUT_MS
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    const probe = buildLayoutProbe();
+    while (Date.now() < deadline) {
+      const result = await this.executeScript(probe);
+      if (result.success && typeof result.data === "string") {
+        try {
+          const { w, h } = JSON.parse(result.data) as { w: number; h: number };
+          if (w > 0 && h > 0) return;
+        } catch {
+          return; // unparseable probe output — stop waiting, let caller proceed
+        }
+      } else {
+        return; // probe failed (e.g. no active layer) — nothing to wait for
+      }
+      await new Promise((r) => setTimeout(r, LAYOUT_POLL_INTERVAL_MS));
+    }
   }
 
   // ---------------------------------------------------------------------------

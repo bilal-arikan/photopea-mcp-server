@@ -136,4 +136,34 @@ describe("PhotopeaBridge", () => {
   it("reports ready state", () => {
     expect(bridge.isReady()).toBe(true);
   });
+
+  it("settleActiveLayer resolves once the layer reports non-zero bounds", async () => {
+    let probes = 0;
+    clientWs.on("message", (data) => {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === "execute") {
+        probes++;
+        // First probe: layout not ready (text still laying out). Then ready.
+        const payload = probes < 2 ? { w: 0, h: 0 } : { w: 120, h: 80 };
+        clientWs.send(JSON.stringify({ id: msg.id, type: "result", success: true, data: JSON.stringify(payload), error: null }));
+      }
+    });
+    await bridge.settleActiveLayer(2000);
+    expect(probes).toBeGreaterThanOrEqual(2);
+  });
+
+  it("settleActiveLayer gives up at the timeout when bounds stay zero", async () => {
+    clientWs.on("message", (data) => {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === "execute") {
+        clientWs.send(JSON.stringify({ id: msg.id, type: "result", success: true, data: JSON.stringify({ w: 0, h: 0 }), error: null }));
+      }
+    });
+    const start = Date.now();
+    await bridge.settleActiveLayer(300);
+    const elapsed = Date.now() - start;
+    // Should return around the timeout, not hang indefinitely.
+    expect(elapsed).toBeGreaterThanOrEqual(250);
+    expect(elapsed).toBeLessThan(2000);
+  });
 });

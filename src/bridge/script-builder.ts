@@ -844,3 +844,19 @@ export function buildRedo(steps: number): string {
   return lines.join("\n");
 }
 
+/**
+ * Probe the active layer's rendered size. Text layers lay out asynchronously in
+ * Photopea (the first use of a font triggers an async web-font load), so right
+ * after creating text the layer bounds are still [0,0,0,0]. Callers poll this
+ * until width/height become non-zero before flattening or exporting.
+ */
+export function buildLayoutProbe(): string {
+  return [
+    `var _pl = app.activeDocument.activeLayer;`,
+    `var _pb = _pl.bounds;`,
+    `var _pw = (_pb && _pb.length === 4) ? (_pb[2] - _pb[0]) : 0;`,
+    `var _ph = (_pb && _pb.length === 4) ? (_pb[3] - _pb[1]) : 0;`,
+    `app.echoToOE(JSON.stringify({ w: Number(_pw), h: Number(_ph) }));`,
+  ].join("\n");
+}
+
