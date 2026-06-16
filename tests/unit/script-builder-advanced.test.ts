@@ -11,6 +11,8 @@ import {
   buildSetClippingMask,
   buildMergeLayers,
   buildIsolateTopLayer,
+  buildMagicWandSelect,
+  buildReplaceColor,
 } from "../../src/bridge/script-builder-advanced.js";
 import { resolveTimeouts } from "../../src/bridge/timeouts.js";
 
@@ -82,6 +84,24 @@ describe("advanced: clipping / merge / isolate", () => {
   });
   it("isolate shows only the given top-level index", () => {
     expect(buildIsolateTopLayer(3)).toContain("(_k === 3)");
+  });
+});
+
+describe("advanced: magic wand / replace color", () => {
+  it("magic wand sets the selection channel to a point with tolerance", () => {
+    const s = buildMagicWandSelect(50, 60, 40, true);
+    expect(s).toContain("putProperty(_c('Chnl'), _c('fsel'))");
+    expect(s).toContain("_c('#Pxl'), 50");
+    expect(s).toContain("_c('#Pxl'), 60");
+    expect(s).toContain("putInteger(_c('Tlrn'), 40)");
+    expect(s).toContain("putBoolean(_c('AntA'), true)");
+  });
+  it("replace color selects then fills with the given rgb and deselects", () => {
+    const s = buildReplaceColor(10, 20, { r: 0, g: 204, b: 0 }, 25);
+    expect(s).toContain("putInteger(_c('Tlrn'), 25)");
+    expect(s).toContain("_fc.rgb.red = 0; _fc.rgb.green = 204; _fc.rgb.blue = 0;");
+    expect(s).toContain("selection.fill(_fc)");
+    expect(s).toContain("selection.deselect()");
   });
 });
 

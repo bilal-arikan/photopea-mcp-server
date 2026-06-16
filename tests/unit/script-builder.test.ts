@@ -29,6 +29,8 @@ import {
   buildClearSelection,
   buildExportImage,
   buildCanvasPreview,
+  buildGetPixelColor,
+  buildGetImageStats,
   buildRunScript,
   buildUndo,
   buildRedo,
@@ -360,6 +362,22 @@ describe("script-builder: export operations", () => {
     expect(script).toContain("saveToOE('png')");
   });
 
+});
+
+describe("script-builder: inspection", () => {
+  it("buildGetPixelColor adds a color sampler at the point and echoes rgb/hex", () => {
+    const s = buildGetPixelColor(120, 80);
+    expect(s).toContain("colorSamplers.add([120, 80])");
+    expect(s).toContain("_cs.remove()");
+    expect(s).toContain("hex");
+  });
+  it("buildGetImageStats samples a grid and reports mean/min/max", () => {
+    const s = buildGetImageStats(8, 8);
+    expect(s).toContain("colorSamplers.add([_x, _y])");
+    expect(s).toContain("mean");
+    expect(s).toContain("min");
+    expect(s).toContain("max");
+  });
 });
 
 describe("script-builder: utility operations", () => {

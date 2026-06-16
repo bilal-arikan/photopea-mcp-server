@@ -226,6 +226,59 @@ export function buildAddAdjustmentLayer(params: AdjustmentLayerParams): string {
 }
 
 // ---------------------------------------------------------------------------
+// Magic wand selection / replace color
+// ---------------------------------------------------------------------------
+
+/**
+ * Emit a magic-wand selection at (x, y) with the given tolerance. Implemented as
+ * a "set the selection channel to a point" Action-Manager call — Photopea's
+ * colorRange event hangs in headless, but this point-based magic wand works.
+ * The selection is contiguous (the connected region of similar pixels).
+ */
+function magicWandLines(x: number, y: number, tolerance: number, antiAlias: boolean): string[] {
+  return [
+    `var _c = function(k){return app.charIDToTypeID(k);};`,
+    `var _wd = new ActionDescriptor();`,
+    `var _wr = new ActionReference();`,
+    `_wr.putProperty(_c('Chnl'), _c('fsel'));`,
+    `_wd.putReference(_c('null'), _wr);`,
+    `var _pt = new ActionDescriptor();`,
+    `_pt.putUnitDouble(_c('Hrzn'), _c('#Pxl'), ${x});`,
+    `_pt.putUnitDouble(_c('Vrtc'), _c('#Pxl'), ${y});`,
+    `_wd.putObject(_c('T   '), _c('Pnt '), _pt);`,
+    `_wd.putInteger(_c('Tlrn'), ${Math.round(tolerance)});`,
+    `_wd.putBoolean(_c('AntA'), ${antiAlias ? "true" : "false"});`,
+    `app.executeAction(_c('setd'), _wd, DialogModes.NO);`,
+  ];
+}
+
+export function buildMagicWandSelect(
+  x: number,
+  y: number,
+  tolerance = 32,
+  antiAlias = true
+): string {
+  return [...magicWandLines(x, y, tolerance, antiAlias), `app.echoToOE('ok');`].join("\n");
+}
+
+/** Magic-wand select the region at (x, y) and fill it with a new color. */
+export function buildReplaceColor(
+  x: number,
+  y: number,
+  color: { r: number; g: number; b: number },
+  tolerance = 32
+): string {
+  return [
+    ...magicWandLines(x, y, tolerance, true),
+    `var _fc = new SolidColor();`,
+    `_fc.rgb.red = ${color.r}; _fc.rgb.green = ${color.g}; _fc.rgb.blue = ${color.b};`,
+    `app.activeDocument.selection.fill(_fc);`,
+    `app.activeDocument.selection.deselect();`,
+    `app.echoToOE('ok');`,
+  ].join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // Clipping mask
 // ---------------------------------------------------------------------------
 

@@ -290,6 +290,15 @@ Bridge timeouts can be overridden via the environment (milliseconds):
 | `photopea_merge_layers` | Flatten the document, merge visible layers, or merge the active layer down |
 | `photopea_export_layers` | Export each top-level layer as its own image file (asset slicing) |
 
+### Inspect & Color (4 tools)
+
+| Tool | Description |
+|------|-------------|
+| `photopea_get_pixel_color` | Sample the exact color (rgb + hex) at a pixel — eyedropper |
+| `photopea_get_image_stats` | Approximate mean/min/max RGB of the canvas (grid sampled) |
+| `photopea_magic_wand_select` | Select the contiguous region of similar pixels around a point |
+| `photopea_replace_color` | Replace the contiguous color region around a point with a new color |
+
 ### Batch & Mockup (2 tools)
 
 | Tool | Description |
@@ -339,7 +348,7 @@ npm run build
 
 The server has four main components:
 
-**MCP Server** (`src/server.ts`) -- Registers all 49 tools with the MCP SDK and connects via stdio transport.
+**MCP Server** (`src/server.ts`) -- Registers all 53 tools with the MCP SDK and connects via stdio transport.
 
 **WebSocket Bridge** (`src/bridge/websocket-server.ts`) -- Manages the connection between the MCP server and the browser. Queues script execution requests and handles responses with timeouts.
 
@@ -378,6 +387,8 @@ src/
     mockup.ts           # Template placeholder replacement (1 tool)
     merge.ts            # Merge / flatten layers (1 tool)
     export-layers.ts    # Export each layer separately (1 tool)
+    inspect.ts          # Eyedropper + image stats (2 tools)
+    select-color.ts     # Magic wand select + replace color (2 tools)
   ai/                   # AI provider abstraction (Dezgo)
     config.ts           # Resolves the Dezgo API key from the environment
     providers.ts        # Pure request builders + fetch executor

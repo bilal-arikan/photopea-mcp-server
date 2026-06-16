@@ -175,6 +175,44 @@ export function buildCreateDocument(params: CreateDocumentParams): string {
   return lines.join("\n");
 }
 
+/** Sample the composite color at a pixel using a temporary color sampler. */
+export function buildGetPixelColor(x: number, y: number): string {
+  return [
+    `function _hx(n){ var h = Math.max(0, Math.min(255, Math.round(n))).toString(16); return h.length === 1 ? '0' + h : h; }`,
+    `var _cs = app.activeDocument.colorSamplers.add([${x}, ${y}]);`,
+    `var _col = _cs.color.rgb;`,
+    `var _r = Math.round(_col.red), _g = Math.round(_col.green), _b = Math.round(_col.blue);`,
+    `_cs.remove();`,
+    `app.echoToOE(JSON.stringify({ x: ${x}, y: ${y}, r: _r, g: _g, b: _b, hex: '#' + _hx(_r) + _hx(_g) + _hx(_b) }));`,
+  ].join("\n");
+}
+
+/**
+ * Compute approximate per-channel statistics (mean/min/max) by sampling a grid
+ * of points. Photopea's document.histogram hangs in headless, so we sample with
+ * temporary color samplers instead. gridX*gridY points are read.
+ */
+export function buildGetImageStats(gridX = 8, gridY = 8): string {
+  return [
+    `var _d = app.activeDocument;`,
+    `var _W = (typeof _d.width === 'object' && _d.width !== null) ? _d.width.value : _d.width;`,
+    `var _H = (typeof _d.height === 'object' && _d.height !== null) ? _d.height.value : _d.height;`,
+    `var _gx = ${gridX}, _gy = ${gridY};`,
+    `var _sr = 0, _sg = 0, _sb = 0, _n = 0;`,
+    `var _mnR = 255, _mnG = 255, _mnB = 255, _mxR = 0, _mxG = 0, _mxB = 0;`,
+    `for (var _i = 0; _i < _gx; _i++) { for (var _j = 0; _j < _gy; _j++) {`,
+    `  var _x = Math.min(_W - 1, Math.round((_i + 0.5) / _gx * _W));`,
+    `  var _y = Math.min(_H - 1, Math.round((_j + 0.5) / _gy * _H));`,
+    `  var _cs = _d.colorSamplers.add([_x, _y]); var _c = _cs.color.rgb;`,
+    `  var _r = Math.round(_c.red), _g = Math.round(_c.green), _b = Math.round(_c.blue); _cs.remove();`,
+    `  _sr += _r; _sg += _g; _sb += _b; _n++;`,
+    `  if (_r < _mnR) _mnR = _r; if (_g < _mnG) _mnG = _g; if (_b < _mnB) _mnB = _b;`,
+    `  if (_r > _mxR) _mxR = _r; if (_g > _mxG) _mxG = _g; if (_b > _mxB) _mxB = _b;`,
+    `} }`,
+    `app.echoToOE(JSON.stringify({ width: _W, height: _H, samples: _n, mean: { r: Math.round(_sr/_n), g: Math.round(_sg/_n), b: Math.round(_sb/_n) }, min: { r: _mnR, g: _mnG, b: _mnB }, max: { r: _mxR, g: _mxG, b: _mxB } }));`,
+  ].join("\n");
+}
+
 export function buildGetDocumentInfo(): string {
   return `
 var _d = app.activeDocument;

@@ -15,6 +15,8 @@ import { registerBatchTools } from "./tools/batch.js";
 import { registerMockupTools } from "./tools/mockup.js";
 import { registerMergeTools } from "./tools/merge.js";
 import { registerExportLayersTools } from "./tools/export-layers.js";
+import { registerInspectTools } from "./tools/inspect.js";
+import { registerSelectColorTools } from "./tools/select-color.js";
 
 export function createServer(bridge: PhotopeaBridge): McpServer {
   const server = new McpServer({ name: "photopea-mcp-server", version: "0.1.0" });
@@ -32,5 +34,7 @@ export function createServer(bridge: PhotopeaBridge): McpServer {
   registerMockupTools(server, bridge);
   registerMergeTools(server, bridge);
   registerExportLayersTools(server, bridge);
+  registerInspectTools(server, bridge);
+  registerSelectColorTools(server, bridge);
   return server;
 }
