@@ -3,6 +3,7 @@ import {
   buildCrop,
   buildTrim,
   buildRotateCanvas,
+  buildCropAspect,
   buildAddLayerMask,
   buildApplyLayerMask,
   buildDeleteLayerMask,
@@ -27,6 +28,12 @@ describe("advanced: canvas ops", () => {
   });
   it("buildRotateCanvas emits rotateCanvas", () => {
     expect(buildRotateCanvas(90)).toContain("rotateCanvas(90)");
+  });
+  it("buildCropAspect computes a centered crop for the target ratio", () => {
+    const s = buildCropAspect(16, 9);
+    expect(s).toContain("_target = 16 / 9");
+    expect(s).toContain("_d.crop([_x, _y, _x + _cw, _y + _ch])");
+    expect(s).toContain("(_W - _cw) / 2");
   });
 });
 

@@ -47,6 +47,27 @@ export function buildRotateCanvas(degrees: number): string {
   ].join("\n");
 }
 
+/**
+ * Crop the canvas to a target aspect ratio (width:height). Keeps the largest
+ * centered rectangle of that ratio that fits the current canvas — i.e. a
+ * center crop that trims the excess on the longer axis. Computed at runtime
+ * from the live document dimensions.
+ */
+export function buildCropAspect(ratioW: number, ratioH: number): string {
+  return [
+    `var _d = app.activeDocument;`,
+    `var _W = (typeof _d.width === 'object' && _d.width !== null) ? _d.width.value : _d.width;`,
+    `var _H = (typeof _d.height === 'object' && _d.height !== null) ? _d.height.value : _d.height;`,
+    `var _target = ${ratioW} / ${ratioH};`,
+    `var _cur = _W / _H;`,
+    `var _cw, _ch;`,
+    `if (_cur > _target) { _ch = _H; _cw = Math.round(_H * _target); } else { _cw = _W; _ch = Math.round(_W / _target); }`,
+    `var _x = Math.round((_W - _cw) / 2), _y = Math.round((_H - _ch) / 2);`,
+    `_d.crop([_x, _y, _x + _cw, _y + _ch]);`,
+    `app.echoToOE('ok');`,
+  ].join("\n");
+}
+
 // ---------------------------------------------------------------------------
 // Layer masks (Action Manager)
 // ---------------------------------------------------------------------------

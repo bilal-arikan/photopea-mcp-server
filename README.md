@@ -265,11 +265,12 @@ Bridge timeouts can be overridden via the environment (milliseconds):
 | `PHOTOPEA_MCP_EXPORT_TIMEOUT_MS` | `60000` | Export/file operation timeout |
 | `PHOTOPEA_MCP_READY_TIMEOUT_MS` | `60000` | Wait for Photopea to load |
 
-### Canvas (3 tools)
+### Canvas (4 tools)
 
 | Tool | Description |
 |------|-------------|
 | `photopea_crop` | Crop the canvas to a rectangular region |
+| `photopea_crop_aspect` | Center-crop to an aspect ratio (presets: 1:1, 16:9, 4:5, … or custom) |
 | `photopea_trim` | Trim uniform/transparent borders |
 | `photopea_rotate_canvas` | Rotate the whole canvas by N degrees |
 
@@ -348,7 +349,7 @@ npm run build
 
 The server has four main components:
 
-**MCP Server** (`src/server.ts`) -- Registers all 53 tools with the MCP SDK and connects via stdio transport.
+**MCP Server** (`src/server.ts`) -- Registers all 54 tools with the MCP SDK and connects via stdio transport.
 
 **WebSocket Bridge** (`src/bridge/websocket-server.ts`) -- Manages the connection between the MCP server and the browser. Queues script execution requests and handles responses with timeouts.
 
