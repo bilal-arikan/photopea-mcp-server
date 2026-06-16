@@ -1,17 +1,11 @@
 // src/ai/providers.ts
-// Pure request builders + a thin fetch executor for the AI image providers.
+// Pure request builders + a thin fetch executor for the Dezgo AI image API.
 // The builders return plain ImageHttpRequest descriptors so they can be
 // unit-tested without any network access.
 
-import type {
-  AiKeys,
-  BgRemovalProvider,
-  ImageHttpRequest,
-  InpaintProvider,
-} from "./types.js";
+import type { ImageHttpRequest } from "./types.js";
 
 const DEZGO_BASE = "https://api.dezgo.com";
-const REMOVEBG_URL = "https://api.remove.bg/v1.0/removebg";
 
 export interface InpaintOptions {
   /** Optional negative prompt (things to avoid). */
@@ -24,25 +18,8 @@ export interface InpaintOptions {
 // Request builders (pure)
 // ---------------------------------------------------------------------------
 
-/** Build the background-removal request for the chosen provider. */
-export function buildRemoveBackgroundRequest(
-  provider: BgRemovalProvider,
-  image: Buffer,
-  key: string
-): ImageHttpRequest {
-  if (provider === "removebg") {
-    return {
-      url: REMOVEBG_URL,
-      method: "POST",
-      headers: { "X-Api-Key": key },
-      fields: [
-        { name: "image_file", value: image, filename: "image.png", contentType: "image/png" },
-        { name: "size", value: "auto" },
-        { name: "format", value: "png" },
-      ],
-    };
-  }
-  // dezgo
+/** Build the Dezgo background-removal request. */
+export function buildRemoveBackgroundRequest(image: Buffer, key: string): ImageHttpRequest {
   return {
     url: `${DEZGO_BASE}/remove-background`,
     method: "POST",
@@ -54,9 +31,8 @@ export function buildRemoveBackgroundRequest(
   };
 }
 
-/** Build the generative inpainting request (Dezgo). White mask pixels = change. */
+/** Build the Dezgo generative inpainting request. White mask pixels = change. */
 export function buildInpaintRequest(
-  _provider: InpaintProvider,
   image: Buffer,
   mask: Buffer,
   prompt: string,
@@ -104,34 +80,12 @@ export async function sendImageRequest(req: ImageHttpRequest): Promise<Buffer> {
     } catch {
       /* ignore */
     }
-    throw new Error(`AI provider request failed (${res.status} ${res.statusText})${detail ? `: ${detail.slice(0, 300)}` : ""}`);
+    throw new Error(`Dezgo request failed (${res.status} ${res.statusText})${detail ? `: ${detail.slice(0, 300)}` : ""}`);
   }
   const arrayBuffer = await res.arrayBuffer();
   return Buffer.from(arrayBuffer);
 }
 
-// ---------------------------------------------------------------------------
-// Provider selection
-// ---------------------------------------------------------------------------
-
-/** Choose a background-removal provider given an explicit choice and available keys. */
-export function selectBgProvider(
-  explicit: BgRemovalProvider | "auto",
-  keys: AiKeys
-): { provider: BgRemovalProvider; key: string } {
-  if (explicit !== "auto") {
-    const key = explicit === "dezgo" ? keys.dezgo : keys.removebg;
-    if (!key) throw new Error(missingKeyMessage(explicit));
-    return { provider: explicit, key };
-  }
-  if (keys.removebg) return { provider: "removebg", key: keys.removebg };
-  if (keys.dezgo) return { provider: "dezgo", key: keys.dezgo };
-  throw new Error(
-    "No background-removal API key configured. Set PHOTOPEA_MCP_REMOVEBG_KEY (remove.bg) or PHOTOPEA_MCP_DEZGO_KEY (Dezgo)."
-  );
-}
-
-export function missingKeyMessage(provider: BgRemovalProvider | InpaintProvider): string {
-  if (provider === "removebg") return "remove.bg requires PHOTOPEA_MCP_REMOVEBG_KEY (or REMOVEBG_API_KEY).";
-  return "Dezgo requires PHOTOPEA_MCP_DEZGO_KEY (or DEZGO_API_KEY).";
-}
+/** Standard error when no Dezgo key is configured. */
+export const MISSING_DEZGO_KEY =
+  "Dezgo requires PHOTOPEA_MCP_DEZGO_KEY (or DEZGO_API_KEY).";

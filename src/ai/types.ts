@@ -1,15 +1,11 @@
 // src/ai/types.ts
 // Types for the optional AI image features (background removal, generative fill).
-// These features call third-party providers and require the user's own API key,
-// exactly like Photopea's built-in "Remove BG" / "Magic Replace" (powered by Dezgo).
+// These features call Dezgo (the same backend Photopea uses for "Remove BG" /
+// "Magic Replace") and require the user's own Dezgo API key.
 
-export type BgRemovalProvider = "dezgo" | "removebg";
-export type InpaintProvider = "dezgo";
-
-/** API keys resolved from the environment. Each is optional. */
+/** API keys resolved from the environment. */
 export interface AiKeys {
   dezgo?: string;
-  removebg?: string;
 }
 
 /**

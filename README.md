@@ -242,16 +242,15 @@ Add to Windsurf MCP settings (`~/.windsurf/mcp.json`):
 | Tool | Description |
 |------|-------------|
 | `photopea_get_canvas_preview` | Render a small, downscaled, **non-destructive** snapshot of the active document and return it inline so the AI can *see* the canvas |
-| `photopea_remove_background` | AI background removal (remove.bg or Dezgo) — opens the transparent cutout as a new document. **Requires an API key.** |
+| `photopea_remove_background` | AI background removal (Dezgo) — opens the transparent cutout as a new document. **Requires an API key.** |
 | `photopea_generative_fill` | AI generative fill / inpainting of a rectangular region from a text prompt (Dezgo). **Requires an API key.** |
 
-#### AI feature API keys
+#### AI feature API key
 
-The AI tools call third-party providers (the same backends Photopea uses) and need **your own API key**, supplied via environment variables:
+The AI tools call **Dezgo** (the same backend Photopea uses for "Remove BG" / "Magic Replace") and need **your own API key**, supplied via an environment variable:
 
 | Variable | Used by | Provider |
 |----------|---------|----------|
-| `PHOTOPEA_MCP_REMOVEBG_KEY` (or `REMOVEBG_API_KEY`) | `remove_background` | [remove.bg](https://www.remove.bg/api) |
 | `PHOTOPEA_MCP_DEZGO_KEY` (or `DEZGO_API_KEY`) | `remove_background`, `generative_fill` | [Dezgo](https://dev.dezgo.com/) |
 
 Without a key the AI tools return a clear error; all other tools work unchanged.

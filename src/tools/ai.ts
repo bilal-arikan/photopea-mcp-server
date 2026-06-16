@@ -20,21 +20,16 @@ export function registerAiTools(server: McpServer, bridge: PhotopeaBridge): void
   server.registerTool("photopea_remove_background", {
     title: "Remove Background (AI)",
     description:
-      "Remove the background of the active document using an AI provider, opening the transparent cutout as a new active document. Requires an API key: set PHOTOPEA_MCP_REMOVEBG_KEY (remove.bg) or PHOTOPEA_MCP_DEZGO_KEY (Dezgo). The original document stays open as a separate tab.",
-    inputSchema: {
-      provider: z
-        .enum(["auto", "removebg", "dezgo"])
-        .default("auto")
-        .describe("Which provider to use. 'auto' picks remove.bg if its key is set, otherwise Dezgo."),
-    },
+      "Remove the background of the active document using Dezgo AI, opening the transparent cutout as a new active document. Requires an API key: set PHOTOPEA_MCP_DEZGO_KEY (or DEZGO_API_KEY). The original document stays open as a separate tab.",
+    inputSchema: {},
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  }, async (params) => {
+  }, async () => {
     const keys = resolveAiKeys();
-    bridge.sendActivity({ type: "activity", id: "", tool: "remove_background", summary: `Remove background (${params.provider})` });
+    bridge.sendActivity({ type: "activity", id: "", tool: "remove_background", summary: "Remove background (Dezgo)" });
     let cutout: Buffer;
     try {
       const png = await exportActivePng(bridge);
-      cutout = await removeBackground(png, params.provider, keys);
+      cutout = await removeBackground(png, keys);
     } catch (err) {
       return { isError: true, content: [textContent((err as Error).message)] };
     }
