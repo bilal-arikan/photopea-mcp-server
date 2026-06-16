@@ -8,6 +8,10 @@ import { registerImageTools } from "./tools/image.js";
 import { registerExportTools } from "./tools/export.js";
 import { registerPreviewTools } from "./tools/preview.js";
 import { registerAiTools } from "./tools/ai.js";
+import { registerCanvasTools } from "./tools/canvas.js";
+import { registerMaskTools } from "./tools/mask.js";
+import { registerAdjustmentLayerTools } from "./tools/adjustment-layer.js";
+import { registerBatchTools } from "./tools/batch.js";
 
 export function createServer(bridge: PhotopeaBridge): McpServer {
   const server = new McpServer({ name: "photopea-mcp-server", version: "0.1.0" });
@@ -18,5 +22,9 @@ export function createServer(bridge: PhotopeaBridge): McpServer {
   registerExportTools(server, bridge);
   registerPreviewTools(server, bridge);
   registerAiTools(server, bridge);
+  registerCanvasTools(server, bridge);
+  registerMaskTools(server, bridge);
+  registerAdjustmentLayerTools(server, bridge);
+  registerBatchTools(server, bridge);
   return server;
 }

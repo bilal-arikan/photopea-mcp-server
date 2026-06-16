@@ -255,6 +255,29 @@ The AI tools call **Dezgo** (the same backend Photopea uses for "Remove BG" / "M
 
 Without a key the AI tools return a clear error; all other tools work unchanged.
 
+### Canvas (3 tools)
+
+| Tool | Description |
+|------|-------------|
+| `photopea_crop` | Crop the canvas to a rectangular region |
+| `photopea_trim` | Trim uniform/transparent borders |
+| `photopea_rotate_canvas` | Rotate the whole canvas by N degrees |
+
+### Masks & Non-destructive (4 tools)
+
+| Tool | Description |
+|------|-------------|
+| `photopea_add_layer_mask` | Add a reveal-all / hide-all pixel mask to the active layer |
+| `photopea_apply_layer_mask` | Bake the mask into the layer's pixels |
+| `photopea_delete_layer_mask` | Remove the mask without applying |
+| `photopea_add_adjustment_layer` | Non-destructive brightness/contrast or hue/saturation adjustment layer |
+
+### Batch (1 tool)
+
+| Tool | Description |
+|------|-------------|
+| `photopea_batch_process` | Open many images, optionally run the same script on each, and export them to a folder |
+
 ## Usage Examples
 
 Once installed, ask your agent to perform image editing tasks:
@@ -297,7 +320,7 @@ npm run build
 
 The server has four main components:
 
-**MCP Server** (`src/server.ts`) -- Registers all 37 tools with the MCP SDK and connects via stdio transport.
+**MCP Server** (`src/server.ts`) -- Registers all 45 tools with the MCP SDK and connects via stdio transport.
 
 **WebSocket Bridge** (`src/bridge/websocket-server.ts`) -- Manages the connection between the MCP server and the browser. Queues script execution requests and handles responses with timeouts.
 
@@ -329,8 +352,12 @@ src/
     export.ts           # Export and utility operations (6 tools)
     preview.ts          # Non-destructive inline canvas preview (1 tool)
     ai.ts               # AI background removal + generative fill (2 tools)
-  ai/                   # AI provider abstraction (Dezgo / remove.bg)
-    config.ts           # Resolves API keys from the environment
+    canvas.ts           # Crop / trim / rotate canvas (3 tools)
+    mask.ts             # Layer mask add / apply / delete (3 tools)
+    adjustment-layer.ts # Non-destructive adjustment layers (1 tool)
+    batch.ts            # Batch process many files (1 tool)
+  ai/                   # AI provider abstraction (Dezgo)
+    config.ts           # Resolves the Dezgo API key from the environment
     providers.ts        # Pure request builders + fetch executor
     index.ts            # removeBackground / generativeInpaint orchestration
   utils/
