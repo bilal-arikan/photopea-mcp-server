@@ -243,7 +243,17 @@ export interface ReplaceSmartObjectParams {
 export interface ExportImageParams {
   format: "png" | "jpg" | "webp" | "psd" | "svg";
   quality?: number;
-  outputPath: string;
+  outputPath?: string;
+  inline?: boolean;
+}
+
+export interface CanvasPreviewParams {
+  /** Longest-edge size in pixels for the downscaled preview (default 512). */
+  maxSize?: number;
+  /** Preview encoding: "jpg" (small, default) or "png" (lossless, supports transparency). */
+  format?: "jpg" | "png";
+  /** JPG quality 1-100 (ignored for png, default 80). */
+  quality?: number;
 }
 
 // --- Layer Info Types (returned by get_layers) ---

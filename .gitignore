@@ -6,3 +6,6 @@ output/
 *.tgz
 .superpowers/
 docs/
+
+# Local smoke-test artifacts
+scripts/out/

@@ -23,6 +23,7 @@ import type {
   ModifySelectionParams,
   FillSelectionParams,
   ExportImageParams,
+  CanvasPreviewParams,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -814,6 +815,33 @@ export function buildExportImage(params: ExportImageParams): string {
 
   lines.push(`app.activeDocument.saveToOE('${formatStr}');`);
   return lines.join("\n");
+}
+
+/**
+ * Build a script that exports a downscaled snapshot of the active document.
+ *
+ * Photopea's Document has no usable duplicate() in headless mode (it opens a
+ * modal dialog and hangs), so instead of working on a copy we resize the real
+ * document down, export it (saveToOE flattens on export), then restore the
+ * pre-resize state from the history stack. The exported buffer is emitted
+ * before the history restore runs (postMessage order is preserved), so the
+ * bridge receives the small image while the user's document is left untouched.
+ */
+export function buildCanvasPreview(params: CanvasPreviewParams = {}): string {
+  const { maxSize = 512, format = "jpg", quality = 80 } = params;
+  const formatStr = format === "jpg" ? `jpg:${quality}` : "png";
+  return [
+    `var _d = app.activeDocument;`,
+    `var _snap = _d.activeHistoryState;`,
+    // Document dimensions may be plain numbers or UnitValue objects — coerce both.
+    `var _w = (typeof _d.width === 'object' && _d.width !== null) ? _d.width.value : _d.width;`,
+    `var _h = (typeof _d.height === 'object' && _d.height !== null) ? _d.height.value : _d.height;`,
+    `var _s = ${maxSize} / Math.max(_w, _h);`,
+    `if (_s < 1) { _d.resizeImage(Math.round(_w * _s), Math.round(_h * _s), null, ResampleMethod.BICUBIC); }`,
+    `_d.saveToOE('${formatStr}');`,
+    // Restore the original (pre-resize) document state.
+    `try { _d.activeHistoryState = _snap; } catch (e) {}`,
+  ].join("\n");
 }
 
 // ---------------------------------------------------------------------------

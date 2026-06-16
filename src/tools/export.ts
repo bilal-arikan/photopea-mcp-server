@@ -10,32 +10,58 @@ import {
   buildRedo,
 } from "../bridge/script-builder.js";
 import { writeLocalFile } from "../utils/file-io.js";
+import { imageContent, textContent, isRasterFormat } from "../utils/mcp-content.js";
 
 export function registerExportTools(server: McpServer, bridge: PhotopeaBridge): void {
   // 30. photopea_export_image
   server.registerTool("photopea_export_image", {
     title: "Export Image",
-    description: "Export the active document to a file and save it to the local filesystem. The entire document is flattened and exported in the chosen format. Use create_document or open_file to set up the document before exporting.",
+    description: "Export the active document, flattened, in the chosen format. Save it to disk (outputPath), return it inline as base64 so you can SEE it (inline), or both. At least one of outputPath/inline must be effective. PNG/JPG/WebP can be returned inline; PSD requires outputPath; SVG is returned as text when inline.",
     inputSchema: {
       format: z.enum(["png", "jpg", "webp", "psd", "svg"]).describe("Output format: 'png' for lossless, 'jpg' for compressed photos, 'webp' for web, 'psd' for Photoshop, 'svg' for vector"),
       quality: z.number().min(1).max(100).optional().describe("Compression quality for JPG format only (1 = smallest file, 100 = best quality). Ignored for other formats."),
-      outputPath: z.string().describe("Absolute local file path where the exported file will be saved (e.g. /Users/me/output.png)"),
+      outputPath: z.string().optional().describe("Absolute local file path to save the export (e.g. /Users/me/output.png). Optional — omit to return the image inline only."),
+      inline: z.boolean().default(true).describe("Return the exported image inline (base64) so the AI can see it. Set false for very large full-resolution images to save tokens. Ignored for PSD."),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (params) => {
+    const target = params.outputPath ? `to ${params.outputPath}` : "inline";
     const script = buildExportImage(params);
-    bridge.sendActivity({ type: "activity", id: "", tool: "export_image", summary: `Export as ${params.format} to ${params.outputPath}` });
+    bridge.sendActivity({ type: "activity", id: "", tool: "export_image", summary: `Export as ${params.format} ${target}` });
     const rawResult = await bridge.executeScript(script, true);
-    if (!rawResult.success) return { isError: true, content: [{ type: "text" as const, text: rawResult.error || "Failed to export image" }] };
+    if (!rawResult.success) return { isError: true, content: [textContent(rawResult.error || "Failed to export image")] };
 
     const fileResult = rawResult as BridgeFileResult;
-    try {
-      await writeLocalFile(params.outputPath, fileResult.data);
-    } catch (err) {
-      return { isError: true, content: [{ type: "text" as const, text: `Export succeeded but failed to write file: ${(err as Error).message}` }] };
+
+    // Write to disk if a path was provided.
+    let savedNote = "";
+    if (params.outputPath) {
+      try {
+        await writeLocalFile(params.outputPath, fileResult.data);
+        savedNote = `Saved to ${params.outputPath}. `;
+      } catch (err) {
+        return { isError: true, content: [textContent(`Export succeeded but failed to write file: ${(err as Error).message}`)] };
+      }
     }
 
-    return { content: [{ type: "text" as const, text: `Image exported to: ${params.outputPath}` }] };
+    const content: Array<ReturnType<typeof imageContent> | ReturnType<typeof textContent>> = [];
+    const raster = isRasterFormat(params.format);
+
+    if (params.inline && raster) {
+      content.push(imageContent(fileResult.data, fileResult.mimeType));
+    } else if (params.inline && params.format === "svg") {
+      // SVG is text — return its source so the AI can read/transform it.
+      content.push(textContent(fileResult.data.toString("utf-8")));
+    } else if (params.inline && params.format === "psd" && !params.outputPath) {
+      return { isError: true, content: [textContent("PSD cannot be returned inline. Provide outputPath to export a PSD.")] };
+    }
+
+    if (!params.outputPath && content.length === 0) {
+      return { isError: true, content: [textContent("Nothing exported: provide outputPath or enable inline (raster/svg only).")] };
+    }
+
+    content.push(textContent(`${savedNote}${params.format.toUpperCase()} export (${fileResult.data.length} bytes)`));
+    return { content };
   });
 
   // photopea_load_font

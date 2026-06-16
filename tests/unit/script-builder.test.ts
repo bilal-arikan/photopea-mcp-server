@@ -28,6 +28,7 @@ import {
   buildFillSelection,
   buildClearSelection,
   buildExportImage,
+  buildCanvasPreview,
   buildRunScript,
   buildUndo,
   buildRedo,
@@ -329,6 +330,23 @@ describe("script-builder: export operations", () => {
   it("buildExportImage jpg with quality", () => {
     const script = buildExportImage({ format: "jpg", quality: 80, outputPath: "/tmp/out.jpg" });
     expect(script).toContain("jpg:80");
+  });
+
+  it("buildCanvasPreview defaults to a downscaled jpg and is non-destructive", () => {
+    const script = buildCanvasPreview();
+    expect(script).toContain("saveToOE('jpg:80')");
+    expect(script).toContain("512 / Math.max(_w, _h)");
+    expect(script).toContain("resizeImage");
+    // Restores the pre-resize history state so the document is untouched.
+    expect(script).toContain("activeHistoryState = _snap");
+    // Must NOT use duplicate() — it opens a modal dialog and hangs in headless.
+    expect(script).not.toContain("duplicate(");
+  });
+
+  it("buildCanvasPreview honors maxSize and png format", () => {
+    const script = buildCanvasPreview({ maxSize: 256, format: "png" });
+    expect(script).toContain("256 / Math.max(_w, _h)");
+    expect(script).toContain("saveToOE('png')");
   });
 
 });
