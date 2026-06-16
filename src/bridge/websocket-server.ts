@@ -14,13 +14,16 @@ import type {
 import { buildLayoutProbe } from "./script-builder.js";
 import { launchSystemBrowser } from "../browser/system-launcher.js";
 import type { BrowserHandle, BrowserLauncher } from "../browser/types.js";
+import { TIMEOUTS } from "./timeouts.js";
 
-const DEFAULT_TIMEOUT_MS = 30_000;
-const EXPORT_TIMEOUT_MS = 60_000;
-const READY_TIMEOUT_MS = 60_000;
-// Async text layout (first-use web-font load) settle window.
-const LAYOUT_SETTLE_TIMEOUT_MS = 5_000;
-const LAYOUT_POLL_INTERVAL_MS = 120;
+const {
+  DEFAULT_TIMEOUT_MS,
+  EXPORT_TIMEOUT_MS,
+  READY_TIMEOUT_MS,
+  // Async text layout (first-use web-font load) settle window.
+  LAYOUT_SETTLE_TIMEOUT_MS,
+  LAYOUT_POLL_INTERVAL_MS,
+} = TIMEOUTS;
 
 export class PhotopeaBridge {
   public readonly httpServer: HttpServer;

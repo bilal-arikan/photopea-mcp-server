@@ -562,10 +562,25 @@ export function buildApplyAdjustment(params: ApplyAdjustmentParams): string {
       break;
     }
     case "hue_sat": {
+      // Apply a real Hue/Saturation adjustment via the Action Manager.
+      // (The old code called adjustColorBalance, which is a different operation
+      // — color balance — and produced wrong results.) Binding-safe ID wrappers
+      // are required: aliasing app.charIDToTypeID directly loses its `this` and
+      // makes executeAction open a modal dialog that hangs in headless.
       const hue = (settings.hue as number) ?? 0;
       const saturation = (settings.saturation as number) ?? 0;
       const lightness = (settings.lightness as number) ?? 0;
-      lines.push(`${layer}.adjustColorBalance(${hue}, ${saturation}, ${lightness});`);
+      lines.push(`var _s = function(x){return app.stringIDToTypeID(x);};`);
+      lines.push(`var _hd = new ActionDescriptor();`);
+      lines.push(`_hd.putBoolean(_s('colorize'), false);`);
+      lines.push(`var _hl = new ActionList();`);
+      lines.push(`var _ha = new ActionDescriptor();`);
+      lines.push(`_ha.putInteger(_s('hue'), ${Math.round(hue)});`);
+      lines.push(`_ha.putInteger(_s('saturation'), ${Math.round(saturation)});`);
+      lines.push(`_ha.putInteger(_s('lightness'), ${Math.round(lightness)});`);
+      lines.push(`_hl.putObject(_s('hueSatAdjustmentV2'), _ha);`);
+      lines.push(`_hd.putList(_s('adjustment'), _hl);`);
+      lines.push(`app.executeAction(_s('hueSaturation'), _hd, DialogModes.NO);`);
       break;
     }
     case "levels": {
@@ -666,50 +681,87 @@ export function buildTransformLayer(params: TransformLayerParams): string {
 // Style operations
 // ---------------------------------------------------------------------------
 
+/**
+ * Apply a smooth gradient to a layer.
+ *
+ * Photopea's native gradient (the Grdn Action-Manager event and the gradient
+ * fill-layer) both open a modal dialog that hangs in headless mode, so we paint
+ * a high-resolution gradient with many interpolated fills instead:
+ *   - linear: STEPS rotated strips perpendicular to `angle` (any angle)
+ *   - radial: a base fill of the edge color, then STEPS shrinking ellipses
+ * STEPS is high (128) so the result is visually smooth, and it works reliably
+ * unattended. Multi-stop colors are interpolated at runtime in Photopea.
+ */
 export function buildAddGradient(params: AddGradientParams): string {
-  const { target, colors, angle = 0 } = params;
+  const { target, type = "linear", colors, angle = 0 } = params;
   const ref = layerRef(target);
-  const lines: string[] = [];
+  const rgbStops = colors.map((c) => {
+    const { r, g, b } = hexToRgb(c);
+    return `[${r},${g},${b}]`;
+  });
+  const STEPS = 128;
 
-  lines.push(`var _layer = ${ref};`);
-  lines.push(`app.activeDocument.activeLayer = _layer;`);
-  lines.push(`app.activeDocument.selection.selectAll();`);
+  const preamble = [
+    `var _layer = ${ref};`,
+    `var _doc = app.activeDocument;`,
+    `_doc.activeLayer = _layer;`,
+    `var _W = (typeof _doc.width === 'object' && _doc.width !== null) ? _doc.width.value : _doc.width;`,
+    `var _H = (typeof _doc.height === 'object' && _doc.height !== null) ? _doc.height.value : _doc.height;`,
+    `var _STOPS = [${rgbStops.join(",")}];`,
+    `function _lerp(a, b, t) { return Math.round(a + (b - a) * t); }`,
+    `function _colAt(t) {`,
+    `  if (t <= 0) return _STOPS[0];`,
+    `  if (t >= 1) return _STOPS[_STOPS.length - 1];`,
+    `  var _seg = 1 / (_STOPS.length - 1);`,
+    `  var _i = Math.min(Math.floor(t / _seg), _STOPS.length - 2);`,
+    `  var _lt = (t - _i * _seg) / _seg;`,
+    `  return [_lerp(_STOPS[_i][0], _STOPS[_i+1][0], _lt), _lerp(_STOPS[_i][1], _STOPS[_i+1][1], _lt), _lerp(_STOPS[_i][2], _STOPS[_i+1][2], _lt)];`,
+    `}`,
+    `function _fill(rgb) { var _sc = new SolidColor(); _sc.rgb.red = rgb[0]; _sc.rgb.green = rgb[1]; _sc.rgb.blue = rgb[2]; _doc.selection.fill(_sc); }`,
+    `var _N = ${STEPS};`,
+  ];
 
-  // Simulate gradient by filling horizontal or vertical bands with interpolated colors.
-  // Fewer steps = faster execution; more steps = smoother result.
-  const steps = 16;
-  const radians = (angle * Math.PI) / 180;
-  const isVertical = Math.abs(Math.cos(radians)) > Math.abs(Math.sin(radians));
-
-  for (let i = 0; i < steps; i++) {
-    const t = i / (steps - 1);
-    // Interpolate between color stops
-    const segmentLen = 1 / (colors.length - 1);
-    const segIdx = Math.min(Math.floor(t / segmentLen), colors.length - 2);
-    const segT = (t - segIdx * segmentLen) / segmentLen;
-    const c1 = hexToRgb(colors[segIdx]);
-    const c2 = hexToRgb(colors[segIdx + 1]);
-    const r = Math.round(c1.r + (c2.r - c1.r) * segT);
-    const g = Math.round(c1.g + (c2.g - c1.g) * segT);
-    const b = Math.round(c1.b + (c2.b - c1.b) * segT);
-
-    lines.push(solidColorLines(`_gc${i}`, r, g, b));
-
-    if (isVertical) {
-      const y0 = `Math.round(${i} / ${steps} * app.activeDocument.height)`;
-      const y1 = `Math.round(${i + 1} / ${steps} * app.activeDocument.height)`;
-      lines.push(`app.activeDocument.selection.select([[0, ${y0}], [app.activeDocument.width, ${y0}], [app.activeDocument.width, ${y1}], [0, ${y1}]]);`);
-    } else {
-      const x0 = `Math.round(${i} / ${steps} * app.activeDocument.width)`;
-      const x1 = `Math.round(${i + 1} / ${steps} * app.activeDocument.width)`;
-      lines.push(`app.activeDocument.selection.select([[${x0}, 0], [${x1}, 0], [${x1}, app.activeDocument.height], [${x0}, app.activeDocument.height]]);`);
-    }
-    lines.push(`app.activeDocument.selection.fill(_gc${i});`);
+  let body: string[];
+  if (type === "radial") {
+    body = [
+      // Base fill with the edge color so the corners (outside the ellipse) match.
+      `_doc.selection.selectAll();`,
+      `_fill(_colAt(1));`,
+      `var _cx = _W / 2, _cy = _H / 2;`,
+      // Approximate each ring as a polygon ellipse via selection.select() — the
+      // object-form selectEllipse does not produce a usable selection here, which
+      // would make fill() flood the whole layer.
+      `var _SEG = 48;`,
+      `for (var _i = 0; _i <= _N; _i++) {`,
+      `  var _rf = 1 - _i / _N;`,
+      `  var _hw = (_W / 2) * _rf, _hh = (_H / 2) * _rf;`,
+      `  if (_hw < 1 || _hh < 1) { continue; }`,
+      `  var _pts = [];`,
+      `  for (var _j = 0; _j < _SEG; _j++) { var _a = _j / _SEG * 2 * Math.PI; _pts.push([_cx + _hw * Math.cos(_a), _cy + _hh * Math.sin(_a)]); }`,
+      `  _doc.selection.select(_pts);`,
+      `  _fill(_colAt(_rf));`,
+      `}`,
+    ];
+  } else {
+    body = [
+      `var _ang = (${angle}) * Math.PI / 180;`,
+      `var _dx = Math.cos(_ang), _dy = Math.sin(_ang);`,
+      `var _px = -_dy, _py = _dx;`,
+      `var _cx = _W / 2, _cy = _H / 2;`,
+      `var _diag = Math.sqrt(_W * _W + _H * _H);`,
+      `for (var _i = 0; _i < _N; _i++) {`,
+      `  var _sm = -_diag / 2 + _diag * ((_i + 0.5) / _N);`,
+      `  var _ht = _diag / (2 * _N) + 0.75;`, // small overlap to avoid seams
+      `  var _ecx = _cx + _sm * _dx, _ecy = _cy + _sm * _dy;`,
+      `  var _ax = _ht * _dx, _ay = _ht * _dy;`,
+      `  var _bx = _diag * _px, _by = _diag * _py;`,
+      `  _doc.selection.select([[_ecx + _ax + _bx, _ecy + _ay + _by], [_ecx + _ax - _bx, _ecy + _ay - _by], [_ecx - _ax - _bx, _ecy - _ay - _by], [_ecx - _ax + _bx, _ecy - _ay + _by]]);`,
+      `  _fill(_colAt((_i + 0.5) / _N));`,
+      `}`,
+    ];
   }
 
-  lines.push(`app.activeDocument.selection.deselect();`);
-  lines.push(`app.echoToOE('ok');`);
-  return lines.join("\n");
+  return [...preamble, ...body, `_doc.selection.deselect();`, `app.echoToOE('ok');`].join("\n");
 }
 
 // ---------------------------------------------------------------------------

@@ -217,10 +217,10 @@ Add to Windsurf MCP settings (`~/.windsurf/mcp.json`):
 | Tool | Description |
 |------|-------------|
 | `photopea_place_image` | Place an image from URL or local path |
-| `photopea_apply_adjustment` | Apply brightness/contrast, hue/saturation, levels, or curves |
+| `photopea_apply_adjustment` | Apply brightness/contrast, hue/saturation, levels, or curves (destructive) |
 | `photopea_apply_filter` | Apply gaussian blur, sharpen, unsharp mask, noise, or motion blur |
 | `photopea_transform_layer` | Scale, rotate, or flip a layer |
-| `photopea_add_gradient` | Apply a linear gradient fill |
+| `photopea_add_gradient` | Apply a smooth **linear** (any angle) or **radial** gradient fill |
 | `photopea_make_selection` | Create a rectangular, elliptical, or full selection |
 | `photopea_modify_selection` | Expand, contract, feather, or invert a selection |
 | `photopea_fill_selection` | Fill the current selection with a color |
@@ -255,6 +255,16 @@ The AI tools call **Dezgo** (the same backend Photopea uses for "Remove BG" / "M
 
 Without a key the AI tools return a clear error; all other tools work unchanged.
 
+#### Timeout configuration (optional)
+
+Bridge timeouts can be overridden via the environment (milliseconds):
+
+| Variable | Default | Controls |
+|----------|---------|----------|
+| `PHOTOPEA_MCP_TIMEOUT_MS` | `30000` | Per-script execution timeout |
+| `PHOTOPEA_MCP_EXPORT_TIMEOUT_MS` | `60000` | Export/file operation timeout |
+| `PHOTOPEA_MCP_READY_TIMEOUT_MS` | `60000` | Wait for Photopea to load |
+
 ### Canvas (3 tools)
 
 | Tool | Description |
@@ -263,14 +273,22 @@ Without a key the AI tools return a clear error; all other tools work unchanged.
 | `photopea_trim` | Trim uniform/transparent borders |
 | `photopea_rotate_canvas` | Rotate the whole canvas by N degrees |
 
-### Masks & Non-destructive (4 tools)
+### Masks & Non-destructive (5 tools)
 
 | Tool | Description |
 |------|-------------|
 | `photopea_add_layer_mask` | Add a reveal-all / hide-all pixel mask to the active layer |
 | `photopea_apply_layer_mask` | Bake the mask into the layer's pixels |
 | `photopea_delete_layer_mask` | Remove the mask without applying |
-| `photopea_add_adjustment_layer` | Non-destructive brightness/contrast or hue/saturation adjustment layer |
+| `photopea_set_clipping_mask` | Clip a layer to the layer below it (confine a texture/photo to a shape) |
+| `photopea_add_adjustment_layer` | Non-destructive brightness/contrast, hue/saturation, or levels adjustment layer |
+
+### Compositing (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `photopea_merge_layers` | Flatten the document, merge visible layers, or merge the active layer down |
+| `photopea_export_layers` | Export each top-level layer as its own image file (asset slicing) |
 
 ### Batch & Mockup (2 tools)
 
@@ -321,7 +339,7 @@ npm run build
 
 The server has four main components:
 
-**MCP Server** (`src/server.ts`) -- Registers all 46 tools with the MCP SDK and connects via stdio transport.
+**MCP Server** (`src/server.ts`) -- Registers all 49 tools with the MCP SDK and connects via stdio transport.
 
 **WebSocket Bridge** (`src/bridge/websocket-server.ts`) -- Manages the connection between the MCP server and the browser. Queues script execution requests and handles responses with timeouts.
 
@@ -358,6 +376,8 @@ src/
     adjustment-layer.ts # Non-destructive adjustment layers (1 tool)
     batch.ts            # Batch process many files (1 tool)
     mockup.ts           # Template placeholder replacement (1 tool)
+    merge.ts            # Merge / flatten layers (1 tool)
+    export-layers.ts    # Export each layer separately (1 tool)
   ai/                   # AI provider abstraction (Dezgo)
     config.ts           # Resolves the Dezgo API key from the environment
     providers.ts        # Pure request builders + fetch executor
@@ -366,6 +386,7 @@ src/
     file-io.ts          # Local file read/write, URL fetching
     mcp-content.ts      # Inline image/text MCP content helpers
     platform.ts         # Port discovery, browser launch
+  bridge/timeouts.ts    # Env-configurable bridge timeouts
   frontend/
     index.html          # Browser UI with Photopea iframe
 scripts/                # Dev/demo harnesses (not shipped to npm)

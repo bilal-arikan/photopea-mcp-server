@@ -100,7 +100,7 @@ export function buildDeleteLayerMask(): string {
 // Adjustment layers (Action Manager) — non-destructive
 // ---------------------------------------------------------------------------
 
-export type AdjustmentLayerType = "brightness" | "hue_sat";
+export type AdjustmentLayerType = "brightness" | "hue_sat" | "levels";
 
 export interface AdjustmentLayerParams {
   type: AdjustmentLayerType;
@@ -180,10 +180,115 @@ export function buildAddAdjustmentLayer(params: AdjustmentLayerParams): string {
       );
       break;
     }
+    case "levels": {
+      // Levels needs a presetKindDefault hint on creation, otherwise the make
+      // opens a modal dialog and hangs in headless. Create default, then set the
+      // composite-channel input/gamma values.
+      const inB = settings.inputMin ?? 0;
+      const inW = settings.inputMax ?? 255;
+      const gamma = settings.gamma ?? 1;
+      lines.push(
+        [
+          `var _c = function(x){return app.charIDToTypeID(x);};`,
+          `var _s = function(x){return app.stringIDToTypeID(x);};`,
+          `var _mk = new ActionDescriptor();`,
+          `var _mr = new ActionReference();`,
+          `_mr.putClass(_c('AdjL'));`,
+          `_mk.putReference(_c('null'), _mr);`,
+          `var _using = new ActionDescriptor();`,
+          `var _tp = new ActionDescriptor();`,
+          `_tp.putEnumerated(_s('presetKind'), _s('presetKindType'), _s('presetKindDefault'));`,
+          `_using.putObject(_c('Type'), _c('Lvls'), _tp);`,
+          `_mk.putObject(_c('Usng'), _c('AdjL'), _using);`,
+          `app.executeAction(_c('Mk  '), _mk, DialogModes.NO);`,
+        ].join("\n")
+      );
+      lines.push(
+        setTarget("_c('Lvls')", [
+          `var _adjL = new ActionList();`,
+          `var _adj = new ActionDescriptor();`,
+          `var _chRef = new ActionReference();`,
+          `_chRef.putEnumerated(_c('Chnl'), _c('Chnl'), _c('Cmps'));`,
+          `_adj.putReference(_c('Chnl'), _chRef);`,
+          `var _inL = new ActionList(); _inL.putInteger(${Math.round(inB)}); _inL.putInteger(${Math.round(inW)});`,
+          `_adj.putList(_c('Inpt'), _inL);`,
+          `_adj.putDouble(_c('Gmm '), ${gamma});`,
+          `_adjL.putObject(_s('levelsAdjustment'), _adj);`,
+          `_t.putList(_s('adjustment'), _adjL);`,
+        ].join("\n"))
+      );
+      break;
+    }
   }
 
   lines.push(`app.echoToOE('ok');`);
   return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Clipping mask
+// ---------------------------------------------------------------------------
+
+/**
+ * Clip (or unclip) a layer to the layer directly below it. A clipped layer is
+ * only visible where the layer below has pixels — the non-destructive way to
+ * confine content (textures, photos) to a shape.
+ */
+export function buildSetClippingMask(target: string | number, enabled: boolean): string {
+  return [
+    `var _layer = ${layerRefAdv(target)};`,
+    `app.activeDocument.activeLayer = _layer;`,
+    `_layer.grouped = ${enabled ? "true" : "false"};`,
+    `app.echoToOE('ok');`,
+  ].join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Merge / flatten
+// ---------------------------------------------------------------------------
+
+export type MergeMode = "flatten" | "visible" | "down";
+
+/** Flatten the whole document, merge all visible layers, or merge the active layer down. */
+export function buildMergeLayers(mode: MergeMode): string {
+  let op: string;
+  switch (mode) {
+    case "flatten":
+      op = `app.activeDocument.flatten();`;
+      break;
+    case "visible":
+      op = `app.activeDocument.mergeVisibleLayers();`;
+      break;
+    case "down":
+    default:
+      op = `app.activeDocument.activeLayer.merge();`;
+      break;
+  }
+  return [op, `app.echoToOE('ok');`].join("\n");
+}
+
+/** Show only the top-level layer at `index`, hiding the rest (for per-layer export). */
+export function buildIsolateTopLayer(index: number): string {
+  return [
+    `var _ls = app.activeDocument.layers;`,
+    `for (var _k = 0; _k < _ls.length; _k++) { _ls[_k].visible = (_k === ${index}); }`,
+    `app.echoToOE('ok');`,
+  ].join("\n");
+}
+
+/** Restore every top-level layer to visible. */
+export function buildShowAllTopLayers(): string {
+  return [
+    `var _ls = app.activeDocument.layers;`,
+    `for (var _k = 0; _k < _ls.length; _k++) { _ls[_k].visible = true; }`,
+    `app.echoToOE('ok');`,
+  ].join("\n");
+}
+
+// Local layer reference (string name = top-level getByName, number = index).
+function layerRefAdv(target: string | number): string {
+  if (typeof target === "number") return `app.activeDocument.layers[${target}]`;
+  return `app.activeDocument.layers.getByName('${escapeString(target)}')`;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,8 +321,11 @@ export function buildMockupReplace(params: MockupReplaceParams): string {
   const op = fit === "fit" ? "Math.min" : "Math.max";
   return [
     `function _bv(v){ return (typeof v === 'object' && v !== null) ? (v.value || v.L || 0) : v; }`,
+    // Recursive layer lookup so placeholders nested inside groups are found too.
+    `function _find(coll, nm){ for (var i = 0; i < coll.length; i++){ var L = coll[i]; if (L.name === nm) return L; if (L.layers && L.layers.length){ var r = _find(L.layers, nm); if (r) return r; } } return null; }`,
     `var _tpl = app.activeDocument;`,
-    `var _ph = _tpl.layers.getByName('${name}');`,
+    `var _ph = _find(_tpl.layers, '${name}');`,
+    `if (!_ph) { throw new Error("placeholder layer not found: ${name}"); }`,
     `_tpl.activeLayer = _ph;`,
     `var _pb = _ph.bounds;`,
     `var _px = _bv(_pb[0]), _py = _bv(_pb[1]);`,

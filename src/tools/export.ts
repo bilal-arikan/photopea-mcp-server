@@ -8,6 +8,7 @@ import {
   buildRunScript,
   buildUndo,
   buildRedo,
+  escapeString,
 } from "../bridge/script-builder.js";
 import { writeLocalFile } from "../utils/file-io.js";
 import { imageContent, textContent, isRasterFormat } from "../utils/mcp-content.js";
@@ -76,7 +77,7 @@ export function registerExportTools(server: McpServer, bridge: PhotopeaBridge): 
     // Loading a font via app.open() opens it as a "document" -- we need to track the current doc and switch back
     const script = [
       `var _docName = app.activeDocument ? app.activeDocument.name : null;`,
-      `app.open('${params.url.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}');`,
+      `app.open('${escapeString(params.url)}');`,
       `if (_docName) { app.activeDocument = app.documents.getByName(_docName); }`,
       `app.echoToOE('ok');`,
     ].join("\n");

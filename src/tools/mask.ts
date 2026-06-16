@@ -6,8 +6,11 @@ import {
   buildAddLayerMask,
   buildApplyLayerMask,
   buildDeleteLayerMask,
+  buildSetClippingMask,
 } from "../bridge/script-builder-advanced.js";
 import { textContent } from "../utils/mcp-content.js";
+
+const layerTarget = z.union([z.string(), z.number()]).describe("Layer name (string) or index (number)");
 
 export function registerMaskTools(server: McpServer, bridge: PhotopeaBridge): void {
   server.registerTool("photopea_add_layer_mask", {
@@ -46,5 +49,20 @@ export function registerMaskTools(server: McpServer, bridge: PhotopeaBridge): vo
     const result = await bridge.executeScript(buildDeleteLayerMask());
     if (!result.success) return { isError: true, content: [textContent(result.error || "Failed to delete layer mask")] };
     return { content: [textContent("Layer mask deleted")] };
+  });
+
+  server.registerTool("photopea_set_clipping_mask", {
+    title: "Set Clipping Mask",
+    description: "Clip a layer to the layer directly below it (or release the clip). A clipped layer only shows where the layer below has pixels — the non-destructive way to confine a texture or photo to a shape. The clipping layer must sit directly above the base layer.",
+    inputSchema: {
+      target: layerTarget,
+      enabled: z.boolean().default(true).describe("true = clip to the layer below; false = release the clip"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async (params) => {
+    bridge.sendActivity({ type: "activity", id: "", tool: "set_clipping_mask", summary: `Clip ${params.target}: ${params.enabled}` });
+    const result = await bridge.executeScript(buildSetClippingMask(params.target, params.enabled));
+    if (!result.success) return { isError: true, content: [textContent(result.error || "Failed to set clipping mask")] };
+    return { content: [textContent(`Clipping mask ${params.enabled ? "enabled" : "released"} on ${params.target}`)] };
   });
 }

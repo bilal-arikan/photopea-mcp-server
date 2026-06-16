@@ -213,7 +213,7 @@ export interface TransformLayerParams {
 
 export interface AddGradientParams {
   target: string | number;
-  type: "linear";
+  type?: "linear" | "radial";
   colors: string[];
   angle?: number;
 }

@@ -254,12 +254,16 @@ describe("script-builder: image operations", () => {
     expect(script).toContain("echoToOE");
   });
 
-  it("buildApplyAdjustment hue_sat", () => {
+  it("buildApplyAdjustment hue_sat uses the real Hue/Saturation AM event, not color balance", () => {
     const script = buildApplyAdjustment({ type: "hue_sat", settings: { hue: 15, saturation: 30, lightness: -5 } });
-    expect(script).toContain("adjustColorBalance");
-    expect(script).toContain("15");
-    expect(script).toContain("30");
-    expect(script).toContain("-5");
+    // Regression: the old code wrongly called adjustColorBalance (a different op).
+    expect(script).not.toContain("adjustColorBalance");
+    expect(script).toContain("hueSaturation");
+    expect(script).toContain("putInteger(_s('hue'), 15)");
+    expect(script).toContain("putInteger(_s('saturation'), 30)");
+    expect(script).toContain("putInteger(_s('lightness'), -5)");
+    // binding-safe wrapper, not a raw alias
+    expect(script).toContain("function(x){return app.stringIDToTypeID(x);}");
   });
 
   it("buildApplyAdjustment levels", () => {
@@ -278,13 +282,20 @@ describe("script-builder: image operations", () => {
 });
 
 describe("script-builder: style operations", () => {
-  it("buildAddGradient linear", () => {
+  it("buildAddGradient linear paints high-res rotated strips at the given angle", () => {
     const script = buildAddGradient({ target: "BG", type: "linear", colors: ["#1a1a2e", "#16213e"], angle: 90 });
     expect(script).toContain("BG");
-    expect(script).toContain("SolidColor");
-    expect(script).toContain("selection.fill");
-    expect(script).toContain("_gc0"); // first gradient step variable
-    expect(script).toContain("_gc15"); // last gradient step variable (16 steps, 0-indexed)
+    expect(script).toContain("_N = 128");          // high-res, smooth
+    expect(script).toContain("(90) * Math.PI / 180"); // angle used
+    expect(script).toContain("_doc.selection.select(");
+    expect(script).not.toContain("_gc0");            // old 16-band impl removed
+  });
+
+  it("buildAddGradient radial uses polygon ellipses and a base edge fill", () => {
+    const script = buildAddGradient({ target: 0, type: "radial", colors: ["#ffff00", "#ff0088"] });
+    expect(script).toContain("selectAll");          // base edge fill
+    expect(script).toContain("Math.cos(_a)");       // polygon ellipse points
+    expect(script).not.toContain("selectEllipse");  // object-form selectEllipse avoided
   });
 });
 

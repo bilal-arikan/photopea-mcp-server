@@ -103,6 +103,16 @@ export function registerImageTools(server: McpServer, bridge: PhotopeaBridge): v
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (params) => {
+    // Surface invalid curves points instead of silently falling back to identity.
+    if (params.type === "curves") {
+      const pts = params.settings?.points;
+      if (pts === undefined) {
+        return { isError: true, content: [{ type: "text" as const, text: "curves requires settings.points, e.g. \"[[0,0],[128,150],[255,255]]\"" }] };
+      }
+      if (typeof pts !== "string" || !/^\s*\[\s*(\[\s*\d+\s*,\s*\d+\s*\]\s*,\s*)+\[\s*\d+\s*,\s*\d+\s*\]\s*\]\s*$/.test(pts)) {
+        return { isError: true, content: [{ type: "text" as const, text: `Invalid curves points: ${String(pts)}. Expected a string of [x,y] pairs, e.g. "[[0,0],[128,150],[255,255]]".` }] };
+      }
+    }
     const script = buildApplyAdjustment(params);
     bridge.sendActivity({ type: "activity", id: "", tool: "apply_adjustment", summary: `Apply ${params.type} adjustment` });
     const result = await bridge.executeScript(script);
@@ -151,12 +161,12 @@ export function registerImageTools(server: McpServer, bridge: PhotopeaBridge): v
   // 24. photopea_add_gradient
   server.registerTool("photopea_add_gradient", {
     title: "Add Gradient",
-    description: "Apply a linear gradient fill to a layer, replacing its current pixel content. The target layer must already exist — use add_layer to create one first. Colors are distributed evenly across the gradient.",
+    description: "Apply a smooth gradient fill to a layer, replacing its current pixel content. The target layer must already exist — use add_layer to create one first. Colors are distributed evenly across the gradient. Supports 'linear' (at any angle) and 'radial' (center-out).",
     inputSchema: {
       target: layerTarget,
-      type: z.enum(["linear"]).describe("Gradient type (currently only 'linear' is supported)"),
-      colors: z.array(hexColor).min(2).describe("Array of hex color stops distributed evenly along the gradient (minimum 2, e.g. ['#ff0000', '#0000ff'])"),
-      angle: z.number().optional().describe("Gradient angle in degrees (0 = left-to-right, 90 = top-to-bottom, default 0)"),
+      type: z.enum(["linear", "radial"]).default("linear").describe("Gradient type: 'linear' (directional, uses angle) or 'radial' (center-out)"),
+      colors: z.array(hexColor).min(2).describe("Array of hex color stops distributed evenly along the gradient (minimum 2, e.g. ['#ff0000', '#0000ff']). For radial, the first color is the center."),
+      angle: z.number().optional().describe("Linear gradient angle in degrees (0 = left-to-right, 90 = top-to-bottom). Ignored for radial."),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (params) => {
