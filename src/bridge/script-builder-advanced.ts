@@ -1,4 +1,5 @@
 // src/bridge/script-builder-advanced.ts
+import { escapeString } from "./script-builder.js";
 // Builders for advanced, non-destructive operations: canvas crop/trim/rotate,
 // layer masks, and adjustment layers. Layer masks and adjustment layers are
 // created through Photopea's Action Manager (executeAction), which mirrors the
@@ -183,4 +184,60 @@ export function buildAddAdjustmentLayer(params: AdjustmentLayerParams): string {
 
   lines.push(`app.echoToOE('ok');`);
   return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Mockup: replace a named placeholder layer's content with a pasted image
+// ---------------------------------------------------------------------------
+
+export interface MockupReplaceParams {
+  /** Name of the placeholder layer in the template to replace. */
+  targetLayer: string;
+  /** "fill" covers the whole placeholder (may crop); "fit" shows the whole image. */
+  fit?: "fill" | "fit";
+  /** Clip the pasted image to the placeholder (recommended for "fill"). */
+  clip?: boolean;
+}
+
+/**
+ * Composite the clipboard image (a just-copied replacement) into a template's
+ * named placeholder layer, scaled to the placeholder's bounds. Runs AFTER the
+ * replacement document has been copied (selectAll + copy) and closed, so the
+ * template is the active document and the image is on the clipboard.
+ *
+ * Note: this is a pragmatic mockup workflow for axis-aligned placeholders.
+ * Photopea cannot replace true smart-object contents in headless mode (the
+ * action opens a modal dialog), so we fit-and-clip a pasted layer instead — no
+ * perspective warp.
+ */
+export function buildMockupReplace(params: MockupReplaceParams): string {
+  const { targetLayer, fit = "fill", clip = true } = params;
+  const name = escapeString(targetLayer);
+  const op = fit === "fit" ? "Math.min" : "Math.max";
+  return [
+    `function _bv(v){ return (typeof v === 'object' && v !== null) ? (v.value || v.L || 0) : v; }`,
+    `var _tpl = app.activeDocument;`,
+    `var _ph = _tpl.layers.getByName('${name}');`,
+    `_tpl.activeLayer = _ph;`,
+    `var _pb = _ph.bounds;`,
+    `var _px = _bv(_pb[0]), _py = _bv(_pb[1]);`,
+    `var _pw = _bv(_pb[2]) - _px, _ph2 = _bv(_pb[3]) - _py;`,
+    // Paste the clipboard image as a new layer.
+    `_tpl.paste();`,
+    `var _l = _tpl.activeLayer;`,
+    `var _lb = _l.bounds;`,
+    `var _lw = _bv(_lb[2]) - _bv(_lb[0]), _lh = _bv(_lb[3]) - _bv(_lb[1]);`,
+    `var _scale = ${op}(_pw / _lw, _ph2 / _lh);`,
+    `if (_lw > 0 && _lh > 0) { _l.resize(_scale * 100, _scale * 100); }`,
+    // Center the scaled layer over the placeholder.
+    `var _lb2 = _l.bounds;`,
+    `var _nlw = _bv(_lb2[2]) - _bv(_lb2[0]), _nlh = _bv(_lb2[3]) - _bv(_lb2[1]);`,
+    `_l.translate((_px + _pw / 2) - (_bv(_lb2[0]) + _nlw / 2), (_py + _ph2 / 2) - (_bv(_lb2[1]) + _nlh / 2));`,
+    `_l.name = '${name} (replaced)';`,
+    // Place the new layer directly above the placeholder.
+    `_l.move(_ph, ElementPlacement.PLACEBEFORE);`,
+    // Clip to the placeholder so overflow is hidden (best-effort).
+    clip ? `try { _l.grouped = true; } catch (e) {}` : `// no clipping`,
+    `app.echoToOE('ok');`,
+  ].join("\n");
 }

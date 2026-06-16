@@ -272,11 +272,12 @@ Without a key the AI tools return a clear error; all other tools work unchanged.
 | `photopea_delete_layer_mask` | Remove the mask without applying |
 | `photopea_add_adjustment_layer` | Non-destructive brightness/contrast or hue/saturation adjustment layer |
 
-### Batch (1 tool)
+### Batch & Mockup (2 tools)
 
 | Tool | Description |
 |------|-------------|
 | `photopea_batch_process` | Open many images, optionally run the same script on each, and export them to a folder |
+| `photopea_mockup_replace` | Fit a replacement image into a template's named placeholder layer and export (flat mockups — no perspective warp) |
 
 ## Usage Examples
 
@@ -320,7 +321,7 @@ npm run build
 
 The server has four main components:
 
-**MCP Server** (`src/server.ts`) -- Registers all 45 tools with the MCP SDK and connects via stdio transport.
+**MCP Server** (`src/server.ts`) -- Registers all 46 tools with the MCP SDK and connects via stdio transport.
 
 **WebSocket Bridge** (`src/bridge/websocket-server.ts`) -- Manages the connection between the MCP server and the browser. Queues script execution requests and handles responses with timeouts.
 
@@ -356,6 +357,7 @@ src/
     mask.ts             # Layer mask add / apply / delete (3 tools)
     adjustment-layer.ts # Non-destructive adjustment layers (1 tool)
     batch.ts            # Batch process many files (1 tool)
+    mockup.ts           # Template placeholder replacement (1 tool)
   ai/                   # AI provider abstraction (Dezgo)
     config.ts           # Resolves the Dezgo API key from the environment
     providers.ts        # Pure request builders + fetch executor

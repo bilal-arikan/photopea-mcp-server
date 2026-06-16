@@ -12,6 +12,7 @@ import { registerCanvasTools } from "./tools/canvas.js";
 import { registerMaskTools } from "./tools/mask.js";
 import { registerAdjustmentLayerTools } from "./tools/adjustment-layer.js";
 import { registerBatchTools } from "./tools/batch.js";
+import { registerMockupTools } from "./tools/mockup.js";
 
 export function createServer(bridge: PhotopeaBridge): McpServer {
   const server = new McpServer({ name: "photopea-mcp-server", version: "0.1.0" });
@@ -26,5 +27,6 @@ export function createServer(bridge: PhotopeaBridge): McpServer {
   registerMaskTools(server, bridge);
   registerAdjustmentLayerTools(server, bridge);
   registerBatchTools(server, bridge);
+  registerMockupTools(server, bridge);
   return server;
 }

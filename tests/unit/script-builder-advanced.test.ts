@@ -7,6 +7,7 @@ import {
   buildApplyLayerMask,
   buildDeleteLayerMask,
   buildAddAdjustmentLayer,
+  buildMockupReplace,
 } from "../../src/bridge/script-builder-advanced.js";
 
 describe("advanced: canvas ops", () => {
@@ -51,5 +52,24 @@ describe("advanced: adjustment layers (AM)", () => {
     expect(s).toContain("hueSaturation");
     expect(s).toContain("putInteger(_s('hue'), 30)");
     expect(s).toContain("putInteger(_s('saturation'), -20)");
+  });
+});
+
+describe("advanced: mockup replace", () => {
+  it("fill uses Math.max scaling and looks up the target layer by name", () => {
+    const s = buildMockupReplace({ targetLayer: "screen", fit: "fill", clip: true });
+    expect(s).toContain("getByName('screen')");
+    expect(s).toContain("Math.max(_pw / _lw, _ph2 / _lh)");
+    expect(s).toContain("_l.grouped = true");
+    expect(s).toContain("PLACEBEFORE");
+  });
+  it("fit uses Math.min scaling; clip=false omits grouping", () => {
+    const s = buildMockupReplace({ targetLayer: "art", fit: "fit", clip: false });
+    expect(s).toContain("Math.min(_pw / _lw, _ph2 / _lh)");
+    expect(s).not.toContain("_l.grouped = true");
+  });
+  it("escapes the layer name", () => {
+    const s = buildMockupReplace({ targetLayer: "a'b" });
+    expect(s).toContain("a\\'b");
   });
 });
