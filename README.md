@@ -230,12 +230,31 @@ Add to Windsurf MCP settings (`~/.windsurf/mcp.json`):
 
 | Tool | Description |
 |------|-------------|
-| `photopea_export_image` | Export to PNG, JPG, WebP, PSD, or SVG |
+| `photopea_export_image` | Export to PNG, JPG, WebP, PSD, or SVG — to disk (`outputPath`) and/or returned **inline** as base64 so the AI can see it |
 | `photopea_load_font` | Load a custom font from a URL (TTF, OTF, WOFF2) |
 | `photopea_list_fonts` | List available fonts, with optional search filter |
 | `photopea_run_script` | Execute arbitrary Photopea JavaScript |
 | `photopea_undo` | Undo one or more actions |
 | `photopea_redo` | Redo one or more actions |
+
+### Preview & AI (3 tools)
+
+| Tool | Description |
+|------|-------------|
+| `photopea_get_canvas_preview` | Render a small, downscaled, **non-destructive** snapshot of the active document and return it inline so the AI can *see* the canvas |
+| `photopea_remove_background` | AI background removal (remove.bg or Dezgo) — opens the transparent cutout as a new document. **Requires an API key.** |
+| `photopea_generative_fill` | AI generative fill / inpainting of a rectangular region from a text prompt (Dezgo). **Requires an API key.** |
+
+#### AI feature API keys
+
+The AI tools call third-party providers (the same backends Photopea uses) and need **your own API key**, supplied via environment variables:
+
+| Variable | Used by | Provider |
+|----------|---------|----------|
+| `PHOTOPEA_MCP_REMOVEBG_KEY` (or `REMOVEBG_API_KEY`) | `remove_background` | [remove.bg](https://www.remove.bg/api) |
+| `PHOTOPEA_MCP_DEZGO_KEY` (or `DEZGO_API_KEY`) | `remove_background`, `generative_fill` | [Dezgo](https://dev.dezgo.com/) |
+
+Without a key the AI tools return a clear error; all other tools work unchanged.
 
 ## Usage Examples
 
@@ -279,7 +298,7 @@ npm run build
 
 The server has four main components:
 
-**MCP Server** (`src/server.ts`) -- Registers all 34 tools with the MCP SDK and connects via stdio transport.
+**MCP Server** (`src/server.ts`) -- Registers all 37 tools with the MCP SDK and connects via stdio transport.
 
 **WebSocket Bridge** (`src/bridge/websocket-server.ts`) -- Manages the connection between the MCP server and the browser. Queues script execution requests and handles responses with timeouts.
 
@@ -309,8 +328,15 @@ src/
     text.ts             # Text and shape operations (3 tools)
     image.ts            # Image, adjustment, filter operations (9 tools)
     export.ts           # Export and utility operations (6 tools)
+    preview.ts          # Non-destructive inline canvas preview (1 tool)
+    ai.ts               # AI background removal + generative fill (2 tools)
+  ai/                   # AI provider abstraction (Dezgo / remove.bg)
+    config.ts           # Resolves API keys from the environment
+    providers.ts        # Pure request builders + fetch executor
+    index.ts            # removeBackground / generativeInpaint orchestration
   utils/
     file-io.ts          # Local file read/write, URL fetching
+    mcp-content.ts      # Inline image/text MCP content helpers
     platform.ts         # Port discovery, browser launch
   frontend/
     index.html          # Browser UI with Photopea iframe

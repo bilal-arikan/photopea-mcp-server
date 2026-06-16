@@ -873,6 +873,39 @@ export function buildRedo(steps: number): string {
 }
 
 /**
+ * Build a script that renders an inpainting mask for the active document and
+ * exports it as PNG. The mask matches the document's pixel dimensions: black
+ * everywhere, with the given rectangular region painted white (white = the
+ * area the generative model is allowed to change). A temporary document is used
+ * and discarded, so the user's document is untouched.
+ */
+export function buildMaskForRegion(region: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): string {
+  const { x, y, width, height } = region;
+  return [
+    `var _src = app.activeDocument;`,
+    `var _dw = (typeof _src.width === 'object' && _src.width !== null) ? _src.width.value : _src.width;`,
+    `var _dh = (typeof _src.height === 'object' && _src.height !== null) ? _src.height.value : _src.height;`,
+    `var _res = (typeof _src.resolution === 'object' && _src.resolution !== null) ? _src.resolution.value : _src.resolution;`,
+    `var _mask = app.documents.add(_dw, _dh, _res, '_ppmask', NewDocumentMode.RGB);`,
+    solidColorLines("_blk", 0, 0, 0),
+    `_mask.selection.selectAll();`,
+    `_mask.selection.fill(_blk);`,
+    `_mask.selection.deselect();`,
+    solidColorLines("_wht", 255, 255, 255),
+    `_mask.selection.select([[${x},${y}],[${x + width},${y}],[${x + width},${y + height}],[${x},${y + height}]]);`,
+    `_mask.selection.fill(_wht);`,
+    `_mask.selection.deselect();`,
+    `_mask.saveToOE('png');`,
+    `_mask.close(2);`,
+  ].join("\n");
+}
+
+/**
  * Probe the active layer's rendered size. Text layers lay out asynchronously in
  * Photopea (the first use of a font triggers an async web-font load), so right
  * after creating text the layer bounds are still [0,0,0,0]. Callers poll this
