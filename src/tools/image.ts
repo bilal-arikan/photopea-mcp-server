@@ -99,7 +99,7 @@ export function registerImageTools(server: McpServer, bridge: PhotopeaBridge): v
     description: "Apply a destructive image adjustment to the active layer's pixel data. Use select_layer to target a specific layer first. Modifies pixels directly — use undo to revert if needed.",
     inputSchema: {
       type: z.enum(["brightness", "hue_sat", "levels", "curves"]).describe("Adjustment type: 'brightness' for brightness/contrast, 'hue_sat' for hue/saturation/lightness, 'levels' for input levels, 'curves' for tone curves"),
-      settings: z.record(z.union([z.number(), z.string(), z.boolean()])).optional().describe("Key-value settings for the adjustment. For brightness: { brightness: -100..100, contrast: -100..100 }. For hue_sat: { hue: -180..180, saturation: -100..100, lightness: -100..100 }. For levels: { inputBlack: 0..255, inputWhite: 0..255 }"),
+      settings: z.record(z.string(), z.union([z.number(), z.string(), z.boolean()])).optional().describe("Key-value settings for the adjustment. For brightness: { brightness: -100..100, contrast: -100..100 }. For hue_sat: { hue: -180..180, saturation: -100..100, lightness: -100..100 }. For levels: { inputBlack: 0..255, inputWhite: 0..255 }"),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (params) => {
@@ -126,7 +126,7 @@ export function registerImageTools(server: McpServer, bridge: PhotopeaBridge): v
     description: "Apply a destructive filter effect to the active layer's pixel data. Use select_layer to target a specific layer first. Modifies pixels directly — use undo to revert if needed.",
     inputSchema: {
       type: z.enum(["gaussian_blur", "sharpen", "unsharp_mask", "noise", "motion_blur"]).describe("Filter type to apply to the active layer"),
-      settings: z.record(z.union([z.number(), z.string(), z.boolean()])).optional().describe("Key-value settings for the filter. For gaussian_blur: { radius: pixels }. For unsharp_mask: { amount: 1-500, radius: 0.1-250, threshold: 0-255 }. For motion_blur: { angle: degrees, distance: pixels }. For noise: { amount: 1-100 }"),
+      settings: z.record(z.string(), z.union([z.number(), z.string(), z.boolean()])).optional().describe("Key-value settings for the filter. For gaussian_blur: { radius: pixels }. For unsharp_mask: { amount: 1-500, radius: 0.1-250, threshold: 0-255 }. For motion_blur: { angle: degrees, distance: pixels }. For noise: { amount: 1-100 }"),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (params) => {
